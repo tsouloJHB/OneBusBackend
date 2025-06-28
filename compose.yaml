@@ -1,0 +1,40 @@
+spring:
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:default}
+  datasource:
+    url: jdbc:postgresql://pg-3839f963-bongzmoche-3095.c.aivencloud.com:22016/defaultdb?sslmode=require
+    username: avnadmin # Replace with your Aiven username
+    password: ${DB_PASSWORD:} # Use an environment variable for the password
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+    hibernate:
+      ddl-auto: update
+  redis:
+    host: localhost
+    port: 6379
+server:
+  port: 8080
+
+---
+spring:
+  config:
+    activate:
+      on-profile: test
+  datasource:
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: create-drop
+  redis:
+    host: localhost
+    port: 6379
