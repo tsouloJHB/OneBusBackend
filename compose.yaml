@@ -4,7 +4,7 @@ spring:
   datasource:
     url: jdbc:postgresql://pg-3839f963-bongzmoche-3095.c.aivencloud.com:22016/defaultdb?sslmode=require
     username: avnadmin # Replace with your Aiven username
-    password: ${DB_PASSWORD:} # Use an environment variable for the password
+    password: ${DB_PASSWORD} # Use an environment variable for the password
     driver-class-name: org.postgresql.Driver
   jpa:
     properties:

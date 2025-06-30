@@ -12,9 +12,11 @@ import org.springframework.web.bind.annotation.*;
 public class BusTrackingController {
     @Autowired
     private BusTrackingService trackingService;
+    private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(BusTrackingController.class);
 
     @PostMapping("/tracker/payload")
     public ResponseEntity<?> receiveTrackerPayload(@RequestBody BusLocation payload) {
+        logger.info("Received tracker payload: {}", payload);
         trackingService.processTrackerPayload(payload);
         return ResponseEntity.ok().build();
     }

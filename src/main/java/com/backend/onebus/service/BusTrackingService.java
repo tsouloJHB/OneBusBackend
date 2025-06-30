@@ -49,13 +49,16 @@ public class BusTrackingService {
 
         if (cachedLocation == null) {
             Bus bus = busRepository.findByTrackerImei(payload.getTrackerImei());
+            if (bus == null) {
+                logger.warn("No bus found for trackerImei: {}", payload.getTrackerImei());
+                return;
+            }
             if (bus != null) {
                 payload.setBusId(bus.getBusId());
                 payload.setBusNumber(bus.getBusNumber());
                 payload.setBusDriverId(bus.getDriverId());
                 payload.setBusDriver(bus.getDriverName());
                 payload.setBusCompany(bus.getBusCompany());
-            } else {
                 return; // Invalid IMEI
             }
         } else {
