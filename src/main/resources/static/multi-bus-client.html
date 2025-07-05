@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multi-Bus Tracking Client</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.5.1/sockjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .client-panel {
+            border: 2px solid #007bff;
+            padding: 20px;
+            border-radius: 8px;
+            background: #f8f9fa;
+        }
+        .client-panel h3 {
+            margin-top: 0;
+            color: #007bff;
+        }
+        .subscription-controls {
+            margin-bottom: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input, select, button {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        .status {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 3px;
+        }
+        .status.success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .bus-data {
+            background-color: #ffffff;
+            padding: 15px;
+            border-radius: 3px;
+            margin-top: 10px;
+            white-space: pre-wrap;
+            font-family: monospace;
+            border: 1px solid #dee2e6;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .connection-status {
+            text-align: center;
+            padding: 10px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+        }
+        .connected {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .disconnected {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .header h1 {
+            color: #007bff;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🚌 Multi-Bus Tracking System</h1>
+        <p>Demonstrate multiple clients subscribing to different buses and directions</p>
+    </div>
+    
+    <div id="connectionStatus" class="connection-status disconnected">
+        Disconnected
+    </div>
+    
+    <div class="container">
+        <div class="client-panel">
+            <h3>👤 Client 1 - Bus 101 Northbound</h3>
+            <div class="subscription-controls">
+                <div class="form-group">
+                    <label>Bus Number:</label>
+                    <input type="text" id="bus1Number" value="101" readonly>
+                </div>
+                <div class="form-group">
+                    <label>Direction:</label>
+                    <select id="bus1Direction">
+                        <option value="Northbound" selected>Northbound</option>
+                        <option value="Southbound">Southbound</option>
+                        <option value="Eastbound">Eastbound</option>
+                        <option value="Westbound">Westbound</option>
+                    </select>
+                </div>
+                <button id="subscribe1Btn" onclick="subscribeClient1()">Subscribe</button>
+                <button id="unsubscribe1Btn" onclick="unsubscribeClient1()" disabled>Unsubscribe</button>
+            </div>
+            <div id="status1"></div>
+            <div id="busData1" class="bus-data">
+                No data received yet. Subscribe to see real-time updates.
+            </div>
+        </div>
+        
+        <div class="client-panel">
+            <h3>👤 Client 2 - Bus 102 Eastbound</h3>
+            <div class="subscription-controls">
+                <div class="form-group">
+                    <label>Bus Number:</label>
+                    <input type="text" id="bus2Number" value="102" readonly>
+                </div>
+                <div class="form-group">
+                    <label>Direction:</label>
+                    <select id="bus2Direction">
+                        <option value="Northbound">Northbound</option>
+                        <option value="Southbound">Southbound</option>
+                        <option value="Eastbound" selected>Eastbound</option>
+                        <option value="Westbound">Westbound</option>
+                    </select>
+                </div>
+                <button id="subscribe2Btn" onclick="subscribeClient2()">Subscribe</button>
+                <button id="unsubscribe2Btn" onclick="unsubscribeClient2()" disabled>Unsubscribe</button>
+            </div>
+            <div id="status2"></div>
+            <div id="busData2" class="bus-data">
+                No data received yet. Subscribe to see real-time updates.
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let stompClient = null;
+        let subscription1 = null;
+        let subscription2 = null;
+        
+        function connect() {
+            const socket = new SockJS('/ws/bus-updates');
+            stompClient = Stomp.over(socket);
+            
+            stompClient.connect({}, function (frame) {
+                console.log('Connected: ' + frame);
+                updateConnectionStatus(true);
+                
+                // Subscribe to subscription status messages
+                stompClient.subscribe('/user/topic/subscription/status', function (message) {
+                    const response = JSON.parse(message.body);
+                    console.log('Subscription status:', response);
+                });
+            }, function (error) {
+                console.log('STOMP error: ' + error);
+                updateConnectionStatus(false);
+            });
+        }
+        
+        function updateConnectionStatus(connected) {
+            const statusDiv = document.getElementById('connectionStatus');
+            if (connected) {
+                statusDiv.textContent = 'Connected to WebSocket Server';
+                statusDiv.className = 'connection-status connected';
+            } else {
+                statusDiv.textContent = 'Disconnected from WebSocket Server';
+                statusDiv.className = 'connection-status disconnected';
+            }
+        }
+        
+        function subscribeClient1() {
+            if (!stompClient) {
+                alert('Not connected to server');
+                return;
+            }
+            
+            const busNumber = document.getElementById('bus1Number').value.trim();
+            const direction = document.getElementById('bus1Direction').value;
+            
+            // Unsubscribe from previous subscription if exists
+            if (subscription1) {
+                subscription1.unsubscribe();
+            }
+            
+            // Subscribe to bus updates
+            const topic = `/topic/bus/${busNumber}_${direction}`;
+            subscription1 = stompClient.subscribe(topic, function (message) {
+                const busData = JSON.parse(message.body);
+                displayBusData1(busData);
+            });
+            
+            // Send subscription request
+            stompClient.send("/app/subscribe", {}, JSON.stringify({
+                busNumber: busNumber,
+                direction: direction
+            }));
+            
+            document.getElementById('subscribe1Btn').disabled = true;
+            document.getElementById('unsubscribe1Btn').disabled = false;
+            showStatus1('success', `Subscribed to bus ${busNumber} ${direction}`);
+        }
+        
+        function unsubscribeClient1() {
+            if (!stompClient || !subscription1) {
+                return;
+            }
+            
+            const busNumber = document.getElementById('bus1Number').value.trim();
+            const direction = document.getElementById('bus1Direction').value;
+            
+            // Unsubscribe from topic
+            subscription1.unsubscribe();
+            subscription1 = null;
+            
+            // Send unsubscription request
+            stompClient.send("/app/unsubscribe", {}, JSON.stringify({
+                busNumber: busNumber,
+                direction: direction
+            }));
+            
+            document.getElementById('subscribe1Btn').disabled = false;
+            document.getElementById('unsubscribe1Btn').disabled = true;
+            document.getElementById('busData1').textContent = 'No data received yet. Subscribe to see real-time updates.';
+            showStatus1('success', `Unsubscribed from bus ${busNumber} ${direction}`);
+        }
+        
+        function subscribeClient2() {
+            if (!stompClient) {
+                alert('Not connected to server');
+                return;
+            }
+            
+            const busNumber = document.getElementById('bus2Number').value.trim();
+            const direction = document.getElementById('bus2Direction').value;
+            
+            // Unsubscribe from previous subscription if exists
+            if (subscription2) {
+                subscription2.unsubscribe();
+            }
+            
+            // Subscribe to bus updates
+            const topic = `/topic/bus/${busNumber}_${direction}`;
+            subscription2 = stompClient.subscribe(topic, function (message) {
+                const busData = JSON.parse(message.body);
+                displayBusData2(busData);
+            });
+            
+            // Send subscription request
+            stompClient.send("/app/subscribe", {}, JSON.stringify({
+                busNumber: busNumber,
+                direction: direction
+            }));
+            
+            document.getElementById('subscribe2Btn').disabled = true;
+            document.getElementById('unsubscribe2Btn').disabled = false;
+            showStatus2('success', `Subscribed to bus ${busNumber} ${direction}`);
+        }
+        
+        function unsubscribeClient2() {
+            if (!stompClient || !subscription2) {
+                return;
+            }
+            
+            const busNumber = document.getElementById('bus2Number').value.trim();
+            const direction = document.getElementById('bus2Direction').value;
+            
+            // Unsubscribe from topic
+            subscription2.unsubscribe();
+            subscription2 = null;
+            
+            // Send unsubscription request
+            stompClient.send("/app/unsubscribe", {}, JSON.stringify({
+                busNumber: busNumber,
+                direction: direction
+            }));
+            
+            document.getElementById('subscribe2Btn').disabled = false;
+            document.getElementById('unsubscribe2Btn').disabled = true;
+            document.getElementById('busData2').textContent = 'No data received yet. Subscribe to see real-time updates.';
+            showStatus2('success', `Unsubscribed from bus ${busNumber} ${direction}`);
+        }
+        
+        function showStatus1(type, message) {
+            const statusDiv = document.getElementById('status1');
+            statusDiv.className = `status ${type}`;
+            statusDiv.textContent = message;
+        }
+        
+        function showStatus2(type, message) {
+            const statusDiv = document.getElementById('status2');
+            statusDiv.className = `status ${type}`;
+            statusDiv.textContent = message;
+        }
+        
+        function displayBusData1(busData) {
+            const dataDiv = document.getElementById('busData1');
+            const timestamp = new Date().toLocaleTimeString();
+            const update = `[${timestamp}] Bus Update:\n${JSON.stringify(busData, null, 2)}\n\n`;
+            dataDiv.textContent = update + dataDiv.textContent;
+            
+            // Keep only last 5 updates
+            const updates = dataDiv.textContent.split('\n\n').slice(0, 5);
+            dataDiv.textContent = updates.join('\n\n');
+        }
+        
+        function displayBusData2(busData) {
+            const dataDiv = document.getElementById('busData2');
+            const timestamp = new Date().toLocaleTimeString();
+            const update = `[${timestamp}] Bus Update:\n${JSON.stringify(busData, null, 2)}\n\n`;
+            dataDiv.textContent = update + dataDiv.textContent;
+            
+            // Keep only last 5 updates
+            const updates = dataDiv.textContent.split('\n\n').slice(0, 5);
+            dataDiv.textContent = updates.join('\n\n');
+        }
+        
+        // Connect when page loads
+        window.onload = function() {
+            connect();
+        };
+        
+        // Reconnect on page visibility change
+        document.addEventListener('visibilitychange', function() {
+            if (!document.hidden && !stompClient.connected) {
+                connect();
+            }
+        });
+    </script>
+</body>
+</html> 

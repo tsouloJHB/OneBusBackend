@@ -7,6 +7,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Set;
+
 @RestController
 @RequestMapping("/api")
 public class BusTrackingController {
@@ -41,5 +43,19 @@ public class BusTrackingController {
     public ResponseEntity<?> clearTrackingData() {
         trackingService.clearTrackingData();
         return ResponseEntity.ok().build();
+    }
+
+    @GetMapping("/buses/{busNumber}/location")
+    public ResponseEntity<BusLocation> getBusLocation(
+            @PathVariable String busNumber,
+            @RequestParam String direction) {
+        BusLocation location = trackingService.getBusLocation(busNumber, direction);
+        return location != null ? ResponseEntity.ok(location) : ResponseEntity.notFound().build();
+    }
+
+    @GetMapping("/buses/active")
+    public ResponseEntity<Set<String>> getActiveBuses() {
+        Set<String> activeBuses = trackingService.getActiveBuses();
+        return ResponseEntity.ok(activeBuses);
     }
 }

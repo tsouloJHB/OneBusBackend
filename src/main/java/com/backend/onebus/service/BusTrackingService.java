@@ -36,6 +36,8 @@ public class BusTrackingService {
     private SimpMessagingTemplate messagingTemplate;
     @Autowired
     private GeometryFactory geometryFactory;
+    @Autowired
+    private BusStreamingService streamingService;
 
     private static final String BUS_LOCATION_KEY = "bus:location:";
     private static final String BUS_GEO_KEY = "bus:geo";
@@ -53,14 +55,12 @@ public class BusTrackingService {
                 logger.warn("No bus found for trackerImei: {}", payload.getTrackerImei());
                 return;
             }
-            if (bus != null) {
-                payload.setBusId(bus.getBusId());
-                payload.setBusNumber(bus.getBusNumber());
-                payload.setBusDriverId(bus.getDriverId());
-                payload.setBusDriver(bus.getDriverName());
-                payload.setBusCompany(bus.getBusCompany());
-                return; // Invalid IMEI
-            }
+            // Set bus details from database
+            payload.setBusId(bus.getBusId());
+            payload.setBusNumber(bus.getBusNumber());
+            payload.setBusDriverId(bus.getDriverId());
+            payload.setBusDriver(bus.getDriverName());
+            payload.setBusCompany(bus.getBusCompany());
         } else {
             payload.setBusId(cachedLocation.getBusId());
             payload.setBusNumber(cachedLocation.getBusNumber());
@@ -86,8 +86,8 @@ public class BusTrackingService {
             redisTemplate.opsForValue().set(redisKey, payload, 24, TimeUnit.HOURS);
         }
 
-        // Stream to WebSocket clients
-        messagingTemplate.convertAndSend("/topic/bus/" + payload.getBusId(), payload);
+        // Stream to subscribed WebSocket clients
+        streamingService.broadcastBusUpdate(payload);
     }
 
     public BusLocation findNearestBus(double lat, double lon, String tripDirection) {
@@ -122,5 +122,40 @@ public class BusTrackingService {
 
     public void clearTrackingData() {
         clearRedisData();
+    }
+
+    /**
+     * Get current location for a specific bus and direction
+     */
+    public BusLocation getBusLocation(String busNumber, String direction) {
+        Set<String> keys = redisTemplate.keys(BUS_LOCATION_KEY + "*");
+        if (keys != null) {
+            for (String key : keys) {
+                BusLocation location = (BusLocation) redisTemplate.opsForValue().get(key);
+                if (location != null && 
+                    busNumber.equals(location.getBusNumber()) && 
+                    direction.equals(location.getTripDirection())) {
+                    return location;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Get all active bus numbers
+     */
+    public Set<String> getActiveBuses() {
+        Set<String> activeBuses = new java.util.HashSet<>();
+        Set<String> keys = redisTemplate.keys(BUS_LOCATION_KEY + "*");
+        if (keys != null) {
+            for (String key : keys) {
+                BusLocation location = (BusLocation) redisTemplate.opsForValue().get(key);
+                if (location != null && location.getBusNumber() != null) {
+                    activeBuses.add(location.getBusNumber());
+                }
+            }
+        }
+        return activeBuses;
     }
 }
