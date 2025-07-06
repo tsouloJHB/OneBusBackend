@@ -3,8 +3,8 @@
 echo "Starting bus 101 simulation..."
 
 # Initial position
-lat=-26.2041
-lon=28.0473
+lat=-26.1986
+lon=28.0547
 
 # Simulate bus moving northbound
 for i in {1..10}; do
