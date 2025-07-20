@@ -28,18 +28,29 @@ public class BusStreamingService {
     // Track active subscriptions: Map<busNumber_direction, Set<sessionId>>
     private final Map<String, Set<String>> activeSubscriptions = new ConcurrentHashMap<>();
     
+    // Track specific bus subscriptions: Map<busId, Set<sessionId>>
+    private final Map<String, Set<String>> specificBusSubscriptions = new ConcurrentHashMap<>();
+    
+    // Track client subscriptions for dynamic re-evaluation: Map<sessionId, ClientSubscription>
+    private final Map<String, ClientSubscription> clientSubscriptions = new ConcurrentHashMap<>();
+    
     /**
      * Subscribe a client to a specific bus and direction
      */
     public void subscribeToBus(String sessionId, String busNumber, String direction) {
         String subscriptionKey = busNumber + "_" + direction;
         activeSubscriptions.computeIfAbsent(subscriptionKey, k -> ConcurrentHashMap.newKeySet()).add(sessionId);
-        logger.info("Client {} subscribed to bus {} direction {}", sessionId, busNumber, direction);
+        logger.info("Client {} subscribed to bus {} direction {} (key: {})", sessionId, busNumber, direction, subscriptionKey);
+        logger.debug("Current active subscriptions: {}", activeSubscriptions.keySet());
         
         // Send current location immediately if available
         BusLocation currentLocation = getCurrentBusLocation(busNumber, direction);
         if (currentLocation != null) {
-            messagingTemplate.convertAndSendToUser(sessionId, "/topic/bus/" + subscriptionKey, currentLocation);
+            String destination = "/topic/bus/" + subscriptionKey;
+            logger.debug("Sending current location to session {} at destination: {}", sessionId, destination);
+            messagingTemplate.convertAndSendToUser(sessionId, destination, currentLocation);
+        } else {
+            logger.debug("No current location available for bus {} direction {}", busNumber, direction);
         }
     }
     
@@ -59,11 +70,59 @@ public class BusStreamingService {
     }
     
     /**
+     * Subscribe a client to a specific bus by bus ID
+     */
+    public void subscribeToSpecificBus(String sessionId, String busId) {
+        specificBusSubscriptions.computeIfAbsent(busId, k -> ConcurrentHashMap.newKeySet()).add(sessionId);
+        logger.info("Client {} subscribed to specific bus {}", sessionId, busId);
+        
+        // Send current location immediately if available
+        BusLocation currentLocation = getBusLocationById(busId);
+        if (currentLocation != null) {
+            messagingTemplate.convertAndSendToUser(sessionId, "/topic/bus/" + busId, currentLocation);
+        }
+    }
+    
+    /**
+     * Unsubscribe a client from a specific bus by bus ID
+     */
+    public void unsubscribeFromSpecificBus(String sessionId, String busId) {
+        Set<String> subscribers = specificBusSubscriptions.get(busId);
+        if (subscribers != null) {
+            subscribers.remove(sessionId);
+            if (subscribers.isEmpty()) {
+                specificBusSubscriptions.remove(busId);
+            }
+        }
+        clientSubscriptions.remove(sessionId);
+        logger.info("Client {} unsubscribed from specific bus {}", sessionId, busId);
+    }
+    
+    /**
+     * Store client subscription details for dynamic re-evaluation
+     */
+    public void storeClientSubscription(String sessionId, String busNumber, String direction, 
+                                      double clientLat, double clientLon, int clientBusStopIndex, String busId) {
+        ClientSubscription subscription = new ClientSubscription(
+            sessionId, busNumber, direction, clientLat, clientLon, clientBusStopIndex, busId);
+        clientSubscriptions.put(sessionId, subscription);
+    }
+    
+    /**
      * Remove all subscriptions for a disconnected client
      */
     public void removeClientSubscriptions(String sessionId) {
+        // Remove from route-based subscriptions
         activeSubscriptions.values().forEach(subscribers -> subscribers.remove(sessionId));
         activeSubscriptions.entrySet().removeIf(entry -> entry.getValue().isEmpty());
+        
+        // Remove from specific bus subscriptions
+        specificBusSubscriptions.values().forEach(subscribers -> subscribers.remove(sessionId));
+        specificBusSubscriptions.entrySet().removeIf(entry -> entry.getValue().isEmpty());
+        
+        // Remove client subscription details
+        clientSubscriptions.remove(sessionId);
+        
         logger.info("Removed all subscriptions for client {}", sessionId);
     }
     
@@ -86,29 +145,49 @@ public class BusStreamingService {
     }
     
     /**
+     * Get bus location by bus ID
+     */
+    private BusLocation getBusLocationById(String busId) {
+        return (BusLocation) redisTemplate.opsForValue().get(BUS_LOCATION_KEY + busId);
+    }
+    
+    /**
      * Broadcast bus location update to all subscribed clients
      */
     public void broadcastBusUpdate(BusLocation location) {
-        if (location.getBusNumber() == null || location.getTripDirection() == null) {
-            logger.warn("Cannot broadcast: busNumber or tripDirection is null");
+        if (location.getBusId() == null) {
+            logger.warn("Cannot broadcast: busId is null");
             return;
         }
         
-        String subscriptionKey = location.getBusNumber() + "_" + location.getTripDirection();
-        Set<String> subscribers = activeSubscriptions.get(subscriptionKey);
-        
-        if (subscribers != null && !subscribers.isEmpty()) {
-            logger.info("Broadcasting update for bus {} direction {} to {} subscribers", 
-                        location.getBusNumber(), location.getTripDirection(), subscribers.size());
+        // Broadcast to specific bus subscribers
+        Set<String> specificSubscribers = specificBusSubscriptions.get(location.getBusId());
+        if (specificSubscribers != null && !specificSubscribers.isEmpty()) {
+            logger.info("Broadcasting update for specific bus {} to {} subscribers", 
+                        location.getBusId(), specificSubscribers.size());
             
-            for (String sessionId : subscribers) {
-                String destination = "/topic/bus/" + subscriptionKey;
-                logger.debug("Sending to session {} at destination: {}", sessionId, destination);
-                messagingTemplate.convertAndSend(destination, location);
+            for (String sessionId : specificSubscribers) {
+                String destination = "/topic/bus/" + location.getBusId();
+                messagingTemplate.convertAndSendToUser(sessionId, destination, location);
             }
-        } else {
-            logger.warn("No subscribers found for bus {} direction {}", 
-                       location.getBusNumber(), location.getTripDirection());
+        }
+        
+        // Also broadcast to route-based subscribers (for backward compatibility)
+        if (location.getBusNumber() != null && location.getTripDirection() != null) {
+            String subscriptionKey = location.getBusNumber() + "_" + location.getTripDirection();
+            Set<String> routeSubscribers = activeSubscriptions.get(subscriptionKey);
+            
+            if (routeSubscribers != null && !routeSubscribers.isEmpty()) {
+                logger.info("Broadcasting update for route {} {} to {} subscribers", 
+                            location.getBusNumber(), location.getTripDirection(), routeSubscribers.size());
+                logger.debug("Route subscribers: {}", routeSubscribers);
+                String destination = "/topic/bus/" + subscriptionKey;
+                logger.debug("Broadcasting to destination: {}", destination);
+                messagingTemplate.convertAndSend(destination, location);
+            } else {
+                logger.debug("No route subscribers found for key: {}", subscriptionKey);
+                logger.debug("Active subscriptions: {}", activeSubscriptions.keySet());
+            }
         }
     }
     
@@ -132,5 +211,38 @@ public class BusStreamingService {
                 }
             }
         }
+    }
+    
+    /**
+     * Inner class to store client subscription details
+     */
+    private static class ClientSubscription {
+        private final String sessionId;
+        private final String busNumber;
+        private final String direction;
+        private final double clientLat;
+        private final double clientLon;
+        private final int clientBusStopIndex;
+        private final String busId;
+        
+        public ClientSubscription(String sessionId, String busNumber, String direction, 
+                                double clientLat, double clientLon, int clientBusStopIndex, String busId) {
+            this.sessionId = sessionId;
+            this.busNumber = busNumber;
+            this.direction = direction;
+            this.clientLat = clientLat;
+            this.clientLon = clientLon;
+            this.clientBusStopIndex = clientBusStopIndex;
+            this.busId = busId;
+        }
+        
+        // Getters
+        public String getSessionId() { return sessionId; }
+        public String getBusNumber() { return busNumber; }
+        public String getDirection() { return direction; }
+        public double getClientLat() { return clientLat; }
+        public double getClientLon() { return clientLon; }
+        public int getClientBusStopIndex() { return clientBusStopIndex; }
+        public String getBusId() { return busId; }
     }
 } 

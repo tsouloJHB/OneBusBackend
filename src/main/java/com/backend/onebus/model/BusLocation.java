@@ -32,6 +32,7 @@ public class BusLocation {
     private String busDriver;
     private String busCompany;
     private long lastSavedTimestamp; // For tracking 30-min saves
+    private Integer busStopIndex;
 
     // Explicit getters and setters to ensure compatibility
     public String getBusId() {
@@ -152,5 +153,13 @@ public class BusLocation {
 
     public void setLastSavedTimestamp(long lastSavedTimestamp) {
         this.lastSavedTimestamp = lastSavedTimestamp;
+    }
+
+    public Integer getBusStopIndex() {
+        return busStopIndex;
+    }
+
+    public void setBusStopIndex(Integer busStopIndex) {
+        this.busStopIndex = busStopIndex;
     }
 }

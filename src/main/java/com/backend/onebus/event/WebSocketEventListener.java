@@ -8,6 +8,7 @@ import org.springframework.context.event.EventListener;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.messaging.SessionDisconnectEvent;
+import org.springframework.web.socket.messaging.SessionConnectEvent;
 
 @Component
 public class WebSocketEventListener {
@@ -16,6 +17,16 @@ public class WebSocketEventListener {
     
     @Autowired
     private BusStreamingService streamingService;
+    
+    @EventListener
+    public void handleWebSocketConnectListener(SessionConnectEvent event) {
+        StompHeaderAccessor headerAccessor = StompHeaderAccessor.wrap(event.getMessage());
+        String sessionId = headerAccessor.getSessionId();
+        
+        if (sessionId != null) {
+            logger.info("WebSocket session connected: {}", sessionId);
+        }
+    }
     
     @EventListener
     public void handleWebSocketDisconnectListener(SessionDisconnectEvent event) {
