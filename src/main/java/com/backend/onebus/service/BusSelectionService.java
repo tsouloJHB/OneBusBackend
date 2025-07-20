@@ -21,47 +21,53 @@ public class BusSelectionService {
     private RedisTemplate<String, Object> redisTemplate;
     
     /**
-     * Select the best bus for a client based on their location and bus stop index
-     * 
-     * @param busNumber Route number (e.g., "C5")
-     * @param direction Direction (e.g., "Northbound")
-     * @param clientLat Client's latitude
-     * @param clientLon Client's longitude
-     * @param clientBusStopIndex Client's current bus stop index
-     * @return The best bus ID for the client, or null if no suitable bus found
+     * Select the best bus for a client based on their location and bus stop index, following the updated rules:
+     * 1. Prefer buses in the requested direction, ahead of or at the client's stop.
+     * 2. If none, select the closest bus in the opposite direction.
+     * 3. If only one bus exists and it's in the opposite direction, return it.
+     * 4. If no buses at all, return null.
+     * 5. Never suggest a bus with a negative index.
      */
     public String selectBestBusForClient(String busNumber, String direction, 
                                        double clientLat, double clientLon, int clientBusStopIndex) {
-        
         logger.info("Selecting best bus for client at index {} on route {} {}", 
                    clientBusStopIndex, busNumber, direction);
-        
-        // Get all active buses for this route and direction
-        List<BusLocation> activeBuses = getActiveBusesForRoute(busNumber, direction);
-        
-        if (activeBuses.isEmpty()) {
-            logger.warn("No active buses found for route {} {}", busNumber, direction);
-            return null;
+
+        // 1. Get all active buses for this route in the requested direction
+        List<BusLocation> busesRequestedDir = getActiveBusesForRoute(busNumber, direction);
+        // 2. Get all active buses for this route in the opposite direction
+        String oppositeDirection = direction.equalsIgnoreCase("Northbound") ? "Southbound" : "Northbound";
+        List<BusLocation> busesOppositeDir = getActiveBusesForRoute(busNumber, oppositeDirection);
+
+        // 3. Filter buses in requested direction: at or ahead of client
+        List<BusLocation> suitableRequested = busesRequestedDir.stream()
+            .filter(bus -> bus.getBusStopIndex() != null && bus.getBusStopIndex() >= clientBusStopIndex)
+            .collect(Collectors.toList());
+
+        if (!suitableRequested.isEmpty()) {
+            // 4. Return the closest bus in requested direction
+            BusLocation best = findClosestIndexBus(suitableRequested, clientBusStopIndex);
+            logger.info("Selected bus {} (index: {}) in requested direction {} for client at index {}", 
+                best.getBusId(), best.getBusStopIndex(), direction, clientBusStopIndex);
+            return best.getBusId();
         }
-        
-        // Filter buses based on index criteria
-        List<BusLocation> suitableBuses = filterSuitableBuses(activeBuses, clientBusStopIndex);
-        
-        if (suitableBuses.isEmpty()) {
-            logger.warn("No suitable buses found for client at index {} (all buses have index > {})", 
-                       clientBusStopIndex, clientBusStopIndex + MAX_INDEX_DIFFERENCE);
-            return null;
+
+        // 5. If no suitable bus in requested direction, try opposite direction
+        if (!busesOppositeDir.isEmpty()) {
+            // Never suggest a bus with a negative index
+            List<BusLocation> suitableOpposite = busesOppositeDir.stream()
+                .filter(bus -> bus.getBusStopIndex() != null && bus.getBusStopIndex() >= 0)
+                .collect(Collectors.toList());
+            if (!suitableOpposite.isEmpty()) {
+                BusLocation bestOpp = findClosestIndexBus(suitableOpposite, clientBusStopIndex);
+                logger.info("Selected bus {} (index: {}) in opposite direction {} for client at index {}", 
+                    bestOpp.getBusId(), bestOpp.getBusStopIndex(), oppositeDirection, clientBusStopIndex);
+                return bestOpp.getBusId();
+            }
         }
-        
-        // Find the bus with the closest index to the client
-        BusLocation bestBus = findClosestIndexBus(suitableBuses, clientBusStopIndex);
-        
-        if (bestBus != null) {
-            logger.info("Selected bus {} (index: {}) for client at index {}", 
-                       bestBus.getBusId(), bestBus.getBusStopIndex(), clientBusStopIndex);
-            return bestBus.getBusId();
-        }
-        
+
+        // 6. No buses available in either direction
+        logger.warn("No buses available for route {} in either direction.", busNumber);
         return null;
     }
     
