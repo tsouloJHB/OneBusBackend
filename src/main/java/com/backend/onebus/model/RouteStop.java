@@ -2,6 +2,7 @@ package com.backend.onebus.model;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
 @Entity
 @Table(name = "route_stops")
@@ -13,6 +14,7 @@ public class RouteStop {
     
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "route_id")
+    @JsonIgnore
     private Route route;
     
     private double latitude;

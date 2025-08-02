@@ -2,6 +2,7 @@ package com.backend.onebus.model;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
 @Entity
 @Table(name = "buses")
@@ -12,7 +13,17 @@ public class Bus {
     private String trackerImei;
     private String busNumber;
     private String route;
-    private String busCompany;
+    
+    // Change from String to BusCompany entity relationship
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "bus_company_id", nullable = true)
+    @JsonIgnore
+    private BusCompany busCompany;
+    
+    // Keep the old busCompany field for backward compatibility (can be removed later)
+    @Column(name = "bus_company_name")
+    private String busCompanyName;
+    
     private String driverId;
     private String driverName;
 
@@ -49,12 +60,20 @@ public class Bus {
         this.route = route;
     }
 
-    public String getBusCompany() {
+    public BusCompany getBusCompany() {
         return busCompany;
     }
 
-    public void setBusCompany(String busCompany) {
+    public void setBusCompany(BusCompany busCompany) {
         this.busCompany = busCompany;
+    }
+    
+    public String getBusCompanyName() {
+        return busCompanyName;
+    }
+
+    public void setBusCompanyName(String busCompanyName) {
+        this.busCompanyName = busCompanyName;
     }
 
     public String getDriverId() {

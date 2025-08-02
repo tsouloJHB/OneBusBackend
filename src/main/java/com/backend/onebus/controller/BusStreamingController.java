@@ -10,10 +10,14 @@ import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.messaging.simp.annotation.SendToUser;
 import org.springframework.stereotype.Controller;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Hidden;
 
 import java.util.Map;
 
 @Controller
+@Tag(name = "Bus Streaming", description = "WebSocket endpoints for real-time bus location streaming")
 public class BusStreamingController {
     
     private static final Logger logger = LoggerFactory.getLogger(BusStreamingController.class);
@@ -29,6 +33,7 @@ public class BusStreamingController {
      */
     @MessageMapping("/subscribe")
     @SendToUser("/topic/subscription/status")
+    @Hidden
     public Map<String, Object> subscribeToBus(
             @Payload Map<String, Object> subscriptionRequest,
             SimpMessageHeaderAccessor headerAccessor) {

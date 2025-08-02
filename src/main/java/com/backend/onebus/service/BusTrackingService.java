@@ -147,7 +147,10 @@ public class BusTrackingService {
             payload.setBusNumber(bus.getBusNumber());
             payload.setBusDriverId(bus.getDriverId());
             payload.setBusDriver(bus.getDriverName());
-            payload.setBusCompany(bus.getBusCompany());
+            // Use the company name or the legacy busCompanyName field
+            String companyName = (bus.getBusCompany() != null) ? 
+                bus.getBusCompany().getName() : bus.getBusCompanyName();
+            payload.setBusCompany(companyName);
         } else {
             payload.setBusId(cachedLocation.getBusId());
             payload.setBusNumber(cachedLocation.getBusNumber());

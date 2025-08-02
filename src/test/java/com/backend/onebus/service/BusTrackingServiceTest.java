@@ -48,7 +48,7 @@ class BusTrackingServiceTest {
         bus.setTrackerImei("imei-123");
         bus.setDriverId("driver-1");
         bus.setDriverName("John Doe");
-        bus.setBusCompany("CompanyX");
+        bus.setBusCompanyName("CompanyX");
         when(busRepository.findByTrackerImei("imei-123")).thenReturn(bus);
 
         // Mock ValueOperations for Redis
@@ -95,7 +95,7 @@ class BusTrackingServiceTest {
         bus.setTrackerImei("imei-456");
         bus.setDriverId("driver-2");
         bus.setDriverName("Jane Doe");
-        bus.setBusCompany("CompanyY");
+        bus.setBusCompanyName("CompanyY");
         when(busRepository.findByTrackerImei("imei-456")).thenReturn(bus);
 
         ValueOperations<String, Object> mockValueOps = mock(ValueOperations.class);
@@ -134,7 +134,7 @@ class BusTrackingServiceTest {
         bus.setTrackerImei("imei-789");
         bus.setDriverId("driver-3");
         bus.setDriverName("Alex Smith");
-        bus.setBusCompany("CompanyZ");
+        bus.setBusCompanyName("CompanyZ");
         when(busRepository.findByTrackerImei("imei-789")).thenReturn(bus);
 
         ValueOperations<String, Object> mockValueOps = mock(ValueOperations.class);
@@ -175,7 +175,7 @@ class BusTrackingServiceTest {
         bus.setTrackerImei("imei-101");
         bus.setDriverId("driver-4");
         bus.setDriverName("Sam Lee");
-        bus.setBusCompany("CompanyA");
+        bus.setBusCompanyName("CompanyA");
         when(busRepository.findByTrackerImei("imei-101")).thenReturn(bus);
 
         ValueOperations<String, Object> mockValueOps = mock(ValueOperations.class);
@@ -216,7 +216,7 @@ class BusTrackingServiceTest {
         bus.setTrackerImei("imei-202");
         bus.setDriverId("driver-5");
         bus.setDriverName("Chris Kim");
-        bus.setBusCompany("CompanyB");
+        bus.setBusCompanyName("CompanyB");
         when(busRepository.findByTrackerImei("imei-202")).thenReturn(bus);
 
         ValueOperations<String, Object> mockValueOps = mock(ValueOperations.class);
