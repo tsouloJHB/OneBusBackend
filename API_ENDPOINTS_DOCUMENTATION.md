@@ -180,7 +180,105 @@ curl -X POST "http://localhost:8080/api/routes/import-json" \
 
 ---
 
-### 4. PUT /api/routes/{routeId}
+### 4. POST /api/routes
+**Description:** Create a new route with direction support
+
+**Method:** `POST`  
+**URL:** `http://localhost:8080/api/routes`
+
+**Content-Type:** `application/json`
+
+**Request Body:** `RouteCreateDTO`
+```json
+{
+  "company": "string (required, max 100 chars)",
+  "busNumber": "string (required, max 20 chars)",
+  "routeName": "string (required, max 200 chars)",
+  "description": "string (optional, max 500 chars)",
+  "direction": "string (required, Northbound|Southbound|Eastbound|Westbound|Bidirectional)",
+  "startPoint": "string (optional, max 255 chars)",
+  "endPoint": "string (optional, max 255 chars)",
+  "active": "boolean (optional, default: true)"
+}
+```
+
+**Response Codes:**
+- `201 Created`: Route created successfully
+- `400 Bad Request`: Invalid input data or route already exists
+- `500 Internal Server Error`: Server error occurred
+
+**🔧 Key Features:**
+- **Direction Support**: Routes must specify direction (Northbound, Southbound, etc.)
+- **Duplicate Prevention**: Same company + busNumber + direction combination not allowed
+- **Optional Start/End Points**: Can specify route terminals
+- **Validation**: Comprehensive input validation with meaningful error messages
+
+**Example Request - Create Northbound Route:**
+```bash
+curl -X POST "http://localhost:8080/api/routes" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "company": "SimulatedCo",
+    "busNumber": "C5",
+    "routeName": "C5 Working Test",
+    "description": "Testing after fixing H2 scope issue",
+    "direction": "Northbound",
+    "startPoint": "Johannesburg CBD",
+    "endPoint": "Sandton City",
+    "active": true
+  }'
+```
+
+**Example Request - Create Southbound Route:**
+```bash
+curl -X POST "http://localhost:8080/api/routes" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "company": "SimulatedCo",
+    "busNumber": "C5",
+    "routeName": "C5 Working Test Southbound",
+    "direction": "Southbound",
+    "startPoint": "Sandton City",
+    "endPoint": "Johannesburg CBD"
+  }'
+```
+
+**Example Success Response:**
+```json
+{
+  "message": "Route created successfully",
+  "route": {
+    "id": 1,
+    "company": "SimulatedCo",
+    "busNumber": "C5",
+    "routeName": "C5 Working Test",
+    "description": "Testing after fixing H2 scope issue",
+    "direction": "Northbound",
+    "startPoint": "Johannesburg CBD",
+    "endPoint": "Sandton City",
+    "active": true
+  }
+}
+```
+
+**Example Error Response (Duplicate Route):**
+```json
+{
+  "error": "Route already exists with the same company, bus number, and direction",
+  "existingRouteId": 1
+}
+```
+
+**Valid Direction Values:**
+- `Northbound` - North direction travel
+- `Southbound` - South direction travel  
+- `Eastbound` - East direction travel
+- `Westbound` - West direction travel
+- `Bidirectional` - Both directions on same route
+
+---
+
+### 5. PUT /api/routes/{routeId}
 **Description:** Update an existing route with intelligent stop management
 
 **Method:** `PUT`  
@@ -297,7 +395,7 @@ curl -X PUT "http://localhost:8080/api/routes/1" \
 
 ---
 
-### 5. DELETE /api/routes/{routeId}/stops/{stopId}
+### 6. DELETE /api/routes/{routeId}/stops/{stopId}
 **Description:** Delete a specific stop from a route
 
 **Method:** `DELETE`  

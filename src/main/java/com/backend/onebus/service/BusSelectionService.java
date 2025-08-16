@@ -79,12 +79,14 @@ public class BusSelectionService {
         
         try {
             Set<String> keys = redisTemplate.keys(BUS_LOCATION_KEY + "*");
+            
             if (keys != null) {
                 for (String key : keys) {
                     BusLocation location = (BusLocation) redisTemplate.opsForValue().get(key);
+                    
                     if (location != null && 
-                        busNumber.equals(location.getBusNumber()) && 
-                        direction.equals(location.getTripDirection()) &&
+                        busNumber.equalsIgnoreCase(location.getBusNumber()) && 
+                        direction.equalsIgnoreCase(location.getTripDirection()) &&
                         location.getBusStopIndex() != null) {
                         activeBuses.add(location);
                     }
@@ -94,7 +96,6 @@ public class BusSelectionService {
             logger.error("Error getting active buses for route {} {}: {}", busNumber, direction, e.getMessage());
         }
         
-        logger.debug("Found {} active buses for route {} {}", activeBuses.size(), busNumber, direction);
         return activeBuses;
     }
     
@@ -157,6 +158,9 @@ public class BusSelectionService {
                     busInfo.put("latitude", bus.getLat());
                     busInfo.put("longitude", bus.getLon());
                     busInfo.put("lastUpdate", bus.getTimestamp());
+                    busInfo.put("busNumber", bus.getBusNumber());
+                    busInfo.put("direction", bus.getTripDirection());
+                    busInfo.put("trackerImei", bus.getTrackerImei());
                     return busInfo;
                 })
                 .collect(Collectors.toList());

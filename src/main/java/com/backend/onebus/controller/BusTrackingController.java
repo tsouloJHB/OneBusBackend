@@ -2,6 +2,7 @@ package com.backend.onebus.controller;
 
 import com.backend.onebus.dto.RouteUpdateDTO;
 import com.backend.onebus.dto.RouteStopUpdateDTO;
+import com.backend.onebus.dto.RouteCreateDTO;
 import com.backend.onebus.model.Bus;
 import com.backend.onebus.model.BusLocation;
 import com.backend.onebus.model.Route;
@@ -137,6 +138,71 @@ public class BusTrackingController {
         return ResponseEntity.ok(buses);
     }
 
+    @GetMapping("/buses/company/{busCompanyName}")
+    @Operation(summary = "Get buses by company", description = "Retrieve all buses belonging to a specific company")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Buses retrieved successfully", 
+                     content = @Content(schema = @Schema(implementation = Bus.class))),
+        @ApiResponse(responseCode = "404", description = "No buses found for the specified company"),
+        @ApiResponse(responseCode = "400", description = "Invalid company name parameter")
+    })
+    public ResponseEntity<?> getBusesByCompany(
+            @Parameter(description = "Name of the bus company", required = true, example = "Rea Vaya")
+            @PathVariable String busCompanyName,
+            @Parameter(description = "Search type: exact, ignoreCase, or contains", example = "ignoreCase")
+            @RequestParam(defaultValue = "ignoreCase") String searchType) {
+        
+        try {
+            logger.info("Searching for buses by company: {} with search type: {}", busCompanyName, searchType);
+            
+            if (busCompanyName == null || busCompanyName.trim().isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of(
+                    "error", "Company name cannot be empty"
+                ));
+            }
+            
+            List<Bus> buses;
+            
+            switch (searchType.toLowerCase()) {
+                case "exact":
+                    buses = busRepository.findByBusCompanyName(busCompanyName);
+                    break;
+                case "contains":
+                    buses = busRepository.findByBusCompanyNameContainingIgnoreCase(busCompanyName);
+                    break;
+                case "ignorecase":
+                default:
+                    buses = busRepository.findByBusCompanyNameIgnoreCase(busCompanyName);
+                    break;
+            }
+            
+            if (buses.isEmpty()) {
+                logger.info("No buses found for company: {}", busCompanyName);
+                return ResponseEntity.ok(Map.of(
+                    "message", "No buses found for company: " + busCompanyName,
+                    "company", busCompanyName,
+                    "buses", buses,
+                    "count", 0
+                ));
+            }
+            
+            logger.info("Found {} buses for company: {}", buses.size(), busCompanyName);
+            return ResponseEntity.ok(Map.of(
+                "message", "Buses retrieved successfully",
+                "company", busCompanyName,
+                "buses", buses,
+                "count", buses.size(),
+                "searchType", searchType
+            ));
+            
+        } catch (Exception e) {
+            logger.error("Error retrieving buses for company {}: {}", busCompanyName, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(
+                "error", "Failed to retrieve buses for company: " + e.getMessage()
+            ));
+        }
+    }
+
     @PostMapping("/buses")
     @Operation(summary = "Create bus", description = "Create a new bus record in the system")
     @ApiResponses(value = {
@@ -169,6 +235,74 @@ public class BusTrackingController {
             @PathVariable Long routeId) {
         Route route = routeRepository.findById(routeId).orElse(null);
         return route != null ? ResponseEntity.ok(route) : ResponseEntity.notFound().build();
+    }
+
+    @PostMapping("/routes")
+    @Operation(summary = "Create a new route", description = "Create a new route with direction support")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "201", description = "Route created successfully", 
+                     content = @Content(schema = @Schema(implementation = Route.class))),
+        @ApiResponse(responseCode = "400", description = "Invalid input data or route already exists"),
+        @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    public ResponseEntity<?> createRoute(
+            @Parameter(description = "Route creation data", required = true)
+            @Valid @RequestBody RouteCreateDTO routeCreateDTO) {
+        try {
+            logger.info("Creating new route: {}", routeCreateDTO);
+            
+            // Check if route already exists with same company, busNumber, and direction
+            Optional<Route> existingRoute = routeRepository.findByCompanyAndBusNumberAndDirection(
+                routeCreateDTO.getCompany(), 
+                routeCreateDTO.getBusNumber(), 
+                routeCreateDTO.getDirection()
+            );
+            
+            if (existingRoute.isPresent()) {
+                logger.warn("Route already exists: company={}, busNumber={}, direction={}", 
+                           routeCreateDTO.getCompany(), routeCreateDTO.getBusNumber(), routeCreateDTO.getDirection());
+                return ResponseEntity.badRequest().body(Map.of(
+                    "error", "Route already exists with the same company, bus number, and direction",
+                    "existingRouteId", existingRoute.get().getId()
+                ));
+            }
+            
+            // Create new route
+            Route newRoute = new Route();
+            newRoute.setCompany(routeCreateDTO.getCompany());
+            newRoute.setBusNumber(routeCreateDTO.getBusNumber());
+            newRoute.setRouteName(routeCreateDTO.getRouteName());
+            newRoute.setDescription(routeCreateDTO.getDescription());
+            newRoute.setDirection(routeCreateDTO.getDirection());
+            newRoute.setStartPoint(routeCreateDTO.getStartPoint());
+            newRoute.setEndPoint(routeCreateDTO.getEndPoint());
+            newRoute.setActive(routeCreateDTO.getActive() != null ? routeCreateDTO.getActive() : true);
+            
+            // Save the route
+            Route savedRoute = routeRepository.save(newRoute);
+            logger.info("Route created successfully with ID: {}", savedRoute.getId());
+            
+            // Return the created route with a success message
+            return ResponseEntity.status(HttpStatus.CREATED).body(Map.of(
+                "message", "Route created successfully",
+                "route", Map.of(
+                    "id", savedRoute.getId(),
+                    "company", savedRoute.getCompany(),
+                    "busNumber", savedRoute.getBusNumber(),
+                    "routeName", savedRoute.getRouteName(),
+                    "description", savedRoute.getDescription() != null ? savedRoute.getDescription() : "",
+                    "direction", savedRoute.getDirection(),
+                    "startPoint", savedRoute.getStartPoint() != null ? savedRoute.getStartPoint() : "",
+                    "endPoint", savedRoute.getEndPoint() != null ? savedRoute.getEndPoint() : "",
+                    "active", savedRoute.isActive()
+                )
+            ));
+            
+        } catch (Exception e) {
+            logger.error("Failed to create route: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Failed to create route: " + e.getMessage()));
+        }
     }
 
     @PostMapping("/routes/import-json")
@@ -470,6 +604,89 @@ public class BusTrackingController {
         } catch (Exception e) {
             logger.error("Error getting available buses for route {} {}: {}", busNumber, direction, e.getMessage());
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+    
+    @GetMapping("/routes/{busNumber}/{companyName}")
+    @Operation(
+        summary = "Get all routes for a bus number and company",
+        description = "Retrieves all routes (both directions) for a specific bus number within a company, including all stops. Case-insensitive search."
+    )
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Successfully retrieved all routes for the bus number and company",
+                content = @Content(mediaType = "application/json")),
+        @ApiResponse(responseCode = "404", description = "No routes found for the specified bus number and company",
+                content = @Content(mediaType = "application/json")),
+        @ApiResponse(responseCode = "500", description = "Internal server error",
+                content = @Content(mediaType = "application/json"))
+    })
+    public ResponseEntity<?> getAllRoutesByBusNumberAndCompany(
+            @Parameter(description = "Bus number to search for", required = true, example = "c5")
+            @PathVariable String busNumber,
+            @Parameter(description = "Company name to search within", required = true, example = "Rea Vaya")
+            @PathVariable String companyName) {
+        
+        try {
+            // Use case-insensitive search for routes with stops
+            List<Route> routes = routeRepository.findByBusNumberAndCompanyIgnoreCase(busNumber, companyName);
+            
+            if (routes.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("message", "No routes found for bus number '" + busNumber + 
+                                          "' in company '" + companyName + "'"));
+            }
+            
+            // Convert routes to response format with stops
+            List<Map<String, Object>> routeResponses = routes.stream()
+                .map(route -> {
+                    Map<String, Object> routeData = new java.util.LinkedHashMap<>();
+                    routeData.put("id", route.getId());
+                    routeData.put("company", route.getCompany());
+                    routeData.put("busNumber", route.getBusNumber());
+                    routeData.put("routeName", route.getRouteName());
+                    routeData.put("description", route.getDescription());
+                    routeData.put("active", route.isActive());
+                    routeData.put("direction", route.getDirection());
+                    routeData.put("startPoint", route.getStartPoint());
+                    routeData.put("endPoint", route.getEndPoint());
+                    
+                    // Add stops information
+                    List<Map<String, Object>> stopsList = route.getStops().stream()
+                        .map(stop -> {
+                            Map<String, Object> stopData = new java.util.LinkedHashMap<>();
+                            stopData.put("id", stop.getId());
+                            stopData.put("latitude", stop.getLatitude());
+                            stopData.put("longitude", stop.getLongitude());
+                            stopData.put("address", stop.getAddress());
+                            stopData.put("busStopIndex", stop.getBusStopIndex());
+                            stopData.put("direction", stop.getDirection());
+                            stopData.put("type", stop.getType());
+                            stopData.put("northboundIndex", stop.getNorthboundIndex());
+                            stopData.put("southboundIndex", stop.getSouthboundIndex());
+                            return stopData;
+                        })
+                        .collect(java.util.stream.Collectors.toList());
+                    
+                    routeData.put("stops", stopsList);
+                    return routeData;
+                })
+                .collect(java.util.stream.Collectors.toList());
+            
+            return ResponseEntity.ok(Map.of(
+                "busNumber", busNumber,
+                "companyName", companyName,
+                "routes", routeResponses,
+                "totalRoutes", routes.size(),
+                "directions", routes.stream()
+                    .map(Route::getDirection)
+                    .distinct()
+                    .sorted()
+                    .toArray()
+            ));
+        } catch (Exception e) {
+            logger.error("Error retrieving routes for bus {} company {}: {}", busNumber, companyName, e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("error", "Error retrieving routes: " + e.getMessage()));
         }
     }
 

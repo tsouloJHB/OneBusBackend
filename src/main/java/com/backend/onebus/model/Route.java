@@ -18,6 +18,15 @@ public class Route {
     private String description;
     private boolean active;
     
+    @Column(name = "direction")
+    private String direction; // e.g., "Northbound", "Southbound"
+    
+    @Column(name = "start_point")
+    private String startPoint; // Optional starting location name
+    
+    @Column(name = "end_point") 
+    private String endPoint; // Optional ending location name
+    
     @OneToMany(mappedBy = "route", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<RouteStop> stops;
     
@@ -39,6 +48,15 @@ public class Route {
     
     public boolean isActive() { return active; }
     public void setActive(boolean active) { this.active = active; }
+    
+    public String getDirection() { return direction; }
+    public void setDirection(String direction) { this.direction = direction; }
+    
+    public String getStartPoint() { return startPoint; }
+    public void setStartPoint(String startPoint) { this.startPoint = startPoint; }
+    
+    public String getEndPoint() { return endPoint; }
+    public void setEndPoint(String endPoint) { this.endPoint = endPoint; }
     
     public List<RouteStop> getStops() { return stops; }
     public void setStops(List<RouteStop> stops) { this.stops = stops; }

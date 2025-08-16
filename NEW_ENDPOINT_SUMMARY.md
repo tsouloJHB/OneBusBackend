@@ -2,6 +2,53 @@
 
 ## 🆕 Recently Added Endpoints
 
+### POST /api/routes
+**Status:** ✅ Implemented  
+**Description:** Create a new route with direction support  
+**Added:** Latest update - Enhanced route management with direction-aware creation
+
+**Key Features:**
+- ✅ Direction-aware route creation (Northbound, Southbound, etc.)
+- ✅ Duplicate prevention (same company + busNumber + direction)
+- ✅ Optional start/end point specification
+- ✅ Comprehensive validation with meaningful error messages
+- ✅ Support for all standard directions plus Bidirectional
+
+**Quick Test:**
+```bash
+# Create a new Northbound route
+curl -X POST "http://localhost:8080/api/routes" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "company": "SimulatedCo",
+    "busNumber": "C5",
+    "routeName": "C5 Working Test",
+    "description": "Testing after fixing H2 scope issue",
+    "direction": "Northbound",
+    "startPoint": "Johannesburg CBD",
+    "endPoint": "Sandton City",
+    "active": true
+  }'
+```
+
+**Response:**
+```json
+{
+  "message": "Route created successfully",
+  "route": {
+    "id": 1,
+    "company": "SimulatedCo",
+    "busNumber": "C5",
+    "routeName": "C5 Working Test",
+    "description": "Testing after fixing H2 scope issue",
+    "direction": "Northbound",
+    "startPoint": "Johannesburg CBD",
+    "endPoint": "Sandton City",
+    "active": true
+  }
+}
+```
+
 ### DELETE /api/routes/{routeId}/stops/{stopId}
 **Status:** ✅ Implemented  
 **Description:** Delete a specific stop from a route  
