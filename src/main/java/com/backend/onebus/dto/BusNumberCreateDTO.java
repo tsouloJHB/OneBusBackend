@@ -3,14 +3,18 @@ package com.backend.onebus.dto;
 import jakarta.validation.constraints.*;
 
 public class BusNumberCreateDTO {
+    @NotNull(message = "Bus company ID is required")
+    private Long busCompanyId;
+    public Long getBusCompanyId() {
+        return busCompanyId;
+    }
+    public void setBusCompanyId(Long busCompanyId) {
+        this.busCompanyId = busCompanyId;
+    }
     
     @NotBlank(message = "Bus number is required")
     @Size(min = 1, max = 20, message = "Bus number must be between 1 and 20 characters")
     private String busNumber;
-    
-    @NotBlank(message = "Company name is required")
-    @Size(min = 2, max = 100, message = "Company name must be between 2 and 100 characters")
-    private String companyName;
     
     @Size(max = 100, message = "Route name cannot exceed 100 characters")
     private String routeName;
@@ -48,14 +52,6 @@ public class BusNumberCreateDTO {
     
     public void setBusNumber(String busNumber) {
         this.busNumber = busNumber;
-    }
-    
-    public String getCompanyName() {
-        return companyName;
-    }
-    
-    public void setCompanyName(String companyName) {
-        this.companyName = companyName;
     }
     
     public String getRouteName() {

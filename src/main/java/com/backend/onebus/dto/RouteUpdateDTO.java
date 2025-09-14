@@ -8,6 +8,13 @@ import java.util.List;
 
 @Schema(description = "Data Transfer Object for updating route information")
 public class RouteUpdateDTO {
+    @Schema(description = "Start point of the route", example = "Thokoza")
+    @Size(max = 255, message = "Start point must be less than 255 characters")
+    private String startPoint;
+
+    @Schema(description = "End point of the route", example = "Johannesburg CBD")
+    @Size(max = 255, message = "End point must be less than 255 characters")
+    private String endPoint;
     
     @Schema(description = "Name of the bus company", example = "Rea Vaya")
     @Size(max = 100, message = "Company name must be less than 100 characters")
@@ -36,15 +43,31 @@ public class RouteUpdateDTO {
     public RouteUpdateDTO() {}
     
     public RouteUpdateDTO(String company, String busNumber, String routeName, String description, Boolean active, List<RouteStopUpdateDTO> stops) {
-        this.company = company;
-        this.busNumber = busNumber;
-        this.routeName = routeName;
-        this.description = description;
-        this.active = active;
-        this.stops = stops;
+    this.company = company;
+    this.busNumber = busNumber;
+    this.routeName = routeName;
+    this.description = description;
+    this.active = active;
+    this.stops = stops;
+    // startPoint and endPoint are not included in this constructor, but can be set via setters
     }
     
     // Getters and Setters
+    public String getStartPoint() {
+        return startPoint;
+    }
+
+    public void setStartPoint(String startPoint) {
+        this.startPoint = startPoint;
+    }
+
+    public String getEndPoint() {
+        return endPoint;
+    }
+
+    public void setEndPoint(String endPoint) {
+        this.endPoint = endPoint;
+    }
     public String getCompany() {
         return company;
     }

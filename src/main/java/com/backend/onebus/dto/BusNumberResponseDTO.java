@@ -4,6 +4,13 @@ import com.fasterxml.jackson.annotation.JsonFormat;
 import java.time.LocalDateTime;
 
 public class BusNumberResponseDTO {
+    public Long getBusCompanyId() {
+        return busCompanyId;
+    }
+    public void setBusCompanyId(Long busCompanyId) {
+        this.busCompanyId = busCompanyId;
+    }
+    private Long busCompanyId;
     
     private Long id;
     private String busNumber;

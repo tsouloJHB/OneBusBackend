@@ -20,23 +20,26 @@ public class BusNumberService {
     
     @Autowired
     private BusNumberRepository busNumberRepository;
+
+    @Autowired
+    private com.backend.onebus.repository.BusCompanyRepository busCompanyRepository;
     
     /**
      * Create a new bus number
      */
     public BusNumberResponseDTO createBusNumber(BusNumberCreateDTO createDTO) {
         // Check if bus number already exists for this company
-        if (busNumberRepository.existsByBusNumberAndCompanyName(createDTO.getBusNumber(), createDTO.getCompanyName())) {
-            throw new IllegalArgumentException("Bus number " + createDTO.getBusNumber() + 
-                                             " already exists for company: " + createDTO.getCompanyName());
+        if (busNumberRepository.existsByBusNumberAndBusCompany_Id(createDTO.getBusNumber(), createDTO.getBusCompanyId())) {
+            throw new IllegalArgumentException("Bus number " + createDTO.getBusNumber() +
+                    " already exists for company ID: " + createDTO.getBusCompanyId());
         }
-        
+        // Fetch BusCompany
+        var busCompany = busCompanyRepository.findById(createDTO.getBusCompanyId())
+                .orElseThrow(() -> new IllegalArgumentException("Bus company not found with ID: " + createDTO.getBusCompanyId()));
         // Convert DTO to entity
-        BusNumber busNumber = convertCreateDTOToEntity(createDTO);
-        
+        BusNumber busNumber = convertCreateDTOToEntity(createDTO, busCompany);
         // Save the entity
         BusNumber savedBusNumber = busNumberRepository.save(busNumber);
-        
         // Convert and return response DTO
         return convertEntityToResponseDTO(savedBusNumber);
     }
@@ -76,8 +79,8 @@ public class BusNumberService {
      * Get bus numbers by company name
      */
     @Transactional(readOnly = true)
-    public List<BusNumberResponseDTO> getBusNumbersByCompany(String companyName) {
-        List<BusNumber> busNumbers = busNumberRepository.findByCompanyNameIgnoreCase(companyName);
+    public List<BusNumberResponseDTO> getBusNumbersByCompany(Long busCompanyId) {
+        List<BusNumber> busNumbers = busNumberRepository.findByBusCompany_Id(busCompanyId);
         return busNumbers.stream()
                 .map(this::convertEntityToResponseDTO)
                 .collect(Collectors.toList());
@@ -87,8 +90,8 @@ public class BusNumberService {
      * Get active bus numbers by company name
      */
     @Transactional(readOnly = true)
-    public List<BusNumberResponseDTO> getActiveBusNumbersByCompany(String companyName) {
-        List<BusNumber> busNumbers = busNumberRepository.findByCompanyNameAndIsActiveTrue(companyName);
+    public List<BusNumberResponseDTO> getActiveBusNumbersByCompany(Long busCompanyId) {
+        List<BusNumber> busNumbers = busNumberRepository.findByBusCompany_IdAndIsActiveTrue(busCompanyId);
         return busNumbers.stream()
                 .map(this::convertEntityToResponseDTO)
                 .collect(Collectors.toList());
@@ -120,8 +123,8 @@ public class BusNumberService {
      * Get all routes (both directions) for a specific bus number and company
      */
     @Transactional(readOnly = true)
-    public List<BusNumberResponseDTO> getAllRoutesByBusNumberAndCompany(String busNumber, String companyName) {
-        List<BusNumber> busNumbers = busNumberRepository.findAllByBusNumberAndCompanyName(busNumber, companyName);
+    public List<BusNumberResponseDTO> getAllRoutesByBusNumberAndCompany(String busNumber, Long busCompanyId) {
+        List<BusNumber> busNumbers = busNumberRepository.findAllByBusNumberAndBusCompany_Id(busNumber, busCompanyId);
         return busNumbers.stream()
                 .map(this::convertEntityToResponseDTO)
                 .collect(Collectors.toList());
@@ -136,7 +139,7 @@ public class BusNumberService {
         Map<String, List<BusNumberResponseDTO>> groupedBusNumbers = new LinkedHashMap<>();
         
         for (BusNumber busNumber : busNumbers) {
-            String companyName = busNumber.getCompanyName();
+            String companyName = busNumber.getBusCompany().getName();
             BusNumberResponseDTO responseDTO = convertEntityToResponseDTO(busNumber);
             
             groupedBusNumbers.computeIfAbsent(companyName, k -> new java.util.ArrayList<>()).add(responseDTO);
@@ -154,10 +157,10 @@ public class BusNumberService {
         
         // Check if bus number is being changed and already exists for this company
         if (!existingBusNumber.getBusNumber().equals(updateDTO.getBusNumber()) || 
-            !existingBusNumber.getCompanyName().equals(updateDTO.getCompanyName())) {
-            if (busNumberRepository.existsByBusNumberAndCompanyName(updateDTO.getBusNumber(), updateDTO.getCompanyName())) {
+            !existingBusNumber.getBusCompany().getId().equals(updateDTO.getBusCompanyId())) {
+            if (busNumberRepository.existsByBusNumberAndBusCompany_Id(updateDTO.getBusNumber(), updateDTO.getBusCompanyId())) {
                 throw new IllegalArgumentException("Bus number " + updateDTO.getBusNumber() + 
-                                                 " already exists for company: " + updateDTO.getCompanyName());
+                                                 " already exists for company ID: " + updateDTO.getBusCompanyId());
             }
         }
         
@@ -208,7 +211,7 @@ public class BusNumberService {
      */
     @Transactional(readOnly = true)
     public List<BusNumberResponseDTO> searchBusNumbersByCompany(String companyName) {
-        List<BusNumber> busNumbers = busNumberRepository.findByCompanyNameContainingIgnoreCase(companyName);
+        List<BusNumber> busNumbers = busNumberRepository.findByBusCompany_NameContainingIgnoreCase(companyName);
         return busNumbers.stream()
                 .map(this::convertEntityToResponseDTO)
                 .collect(Collectors.toList());
@@ -218,15 +221,15 @@ public class BusNumberService {
      * Get count of bus numbers by company
      */
     @Transactional(readOnly = true)
-    public Long countBusNumbersByCompany(String companyName) {
-        return busNumberRepository.countByCompanyName(companyName);
+    public Long countBusNumbersByCompany(Long busCompanyId) {
+        return busNumberRepository.countByBusCompany_Id(busCompanyId);
     }
     
     // Helper methods for conversion
-    private BusNumber convertCreateDTOToEntity(BusNumberCreateDTO dto) {
+    private BusNumber convertCreateDTOToEntity(BusNumberCreateDTO dto, com.backend.onebus.model.BusCompany busCompany) {
         BusNumber entity = new BusNumber();
         entity.setBusNumber(dto.getBusNumber());
-        entity.setCompanyName(dto.getCompanyName());
+        entity.setBusCompany(busCompany);
         entity.setRouteName(dto.getRouteName());
         entity.setDescription(dto.getDescription());
         entity.setStartDestination(dto.getStartDestination());
@@ -243,6 +246,7 @@ public class BusNumberService {
         BusNumberResponseDTO dto = new BusNumberResponseDTO();
         dto.setId(entity.getId());
         dto.setBusNumber(entity.getBusNumber());
+        dto.setBusCompanyId(entity.getBusCompany().getId());
         dto.setCompanyName(entity.getCompanyName());
         dto.setRouteName(entity.getRouteName());
         dto.setDescription(entity.getDescription());
@@ -260,7 +264,10 @@ public class BusNumberService {
     
     private void updateEntityFromDTO(BusNumber entity, BusNumberCreateDTO dto) {
         entity.setBusNumber(dto.getBusNumber());
-        entity.setCompanyName(dto.getCompanyName());
+        // Fetch and set BusCompany
+        var busCompany = busCompanyRepository.findById(dto.getBusCompanyId())
+                .orElseThrow(() -> new IllegalArgumentException("Bus company not found with ID: " + dto.getBusCompanyId()));
+        entity.setBusCompany(busCompany);
         entity.setRouteName(dto.getRouteName());
         entity.setDescription(dto.getDescription());
         entity.setStartDestination(dto.getStartDestination());

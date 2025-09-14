@@ -11,24 +11,17 @@ import java.util.Optional;
 
 @Repository
 public interface BusNumberRepository extends JpaRepository<BusNumber, Long> {
+    List<BusNumber> findByBusCompany_Id(Long busCompanyId);
+    List<BusNumber> findByBusCompany_IdAndIsActiveTrue(Long busCompanyId);
     
     // Find by bus number and company name
-    Optional<BusNumber> findByBusNumberAndCompanyName(String busNumber, String companyName);
+        Optional<BusNumber> findByBusNumberAndBusCompany_Id(String busNumber, Long busCompanyId);
     
-    // Find all routes (both directions) for a specific bus number and company
-    List<BusNumber> findAllByBusNumberAndCompanyName(String busNumber, String companyName);
-    
-    // Find all bus numbers by company name
-    List<BusNumber> findByCompanyName(String companyName);
-    
-    // Find all bus numbers by company name (case insensitive)
-    List<BusNumber> findByCompanyNameIgnoreCase(String companyName);
+    // Find all routes (both directions) for a specific bus number and company by ID
+    List<BusNumber> findAllByBusNumberAndBusCompany_Id(String busNumber, Long busCompanyId);
     
     // Find all active bus numbers
     List<BusNumber> findByIsActiveTrue();
-    
-    // Find all active bus numbers by company name
-    List<BusNumber> findByCompanyNameAndIsActiveTrue(String companyName);
     
     // Find all bus numbers by route name
     List<BusNumber> findByRouteName(String routeName);
@@ -36,8 +29,8 @@ public interface BusNumberRepository extends JpaRepository<BusNumber, Long> {
     // Find all bus numbers by direction
     List<BusNumber> findByDirection(String direction);
     
-    // Search bus numbers by company name containing
-    List<BusNumber> findByCompanyNameContainingIgnoreCase(String companyName);
+    // Search bus numbers by company name containing (by relationship)
+    List<BusNumber> findByBusCompany_NameContainingIgnoreCase(String companyName);
     
     // Search bus numbers by route name containing
     List<BusNumber> findByRouteNameContainingIgnoreCase(String routeName);
@@ -53,14 +46,13 @@ public interface BusNumberRepository extends JpaRepository<BusNumber, Long> {
     List<BusNumber> findByDistanceRange(@Param("minDistance") Double minDistance, 
                                        @Param("maxDistance") Double maxDistance);
     
-    // Check if bus number exists for company
-    boolean existsByBusNumberAndCompanyName(String busNumber, String companyName);
+    // Check if bus number exists for company by ID
+    boolean existsByBusNumberAndBusCompany_Id(String busNumber, Long busCompanyId);
     
-    // Count bus numbers by company
-    @Query("SELECT COUNT(bn) FROM BusNumber bn WHERE bn.companyName = :companyName")
-    Long countByCompanyName(@Param("companyName") String companyName);
+    // Count bus numbers by company ID
+    Long countByBusCompany_Id(Long busCompanyId);
     
     // Custom query to get bus numbers with routes grouped by company
-    @Query("SELECT bn FROM BusNumber bn WHERE bn.isActive = true ORDER BY bn.companyName, bn.busNumber")
+    @Query("SELECT bn FROM BusNumber bn WHERE bn.isActive = true ORDER BY bn.busCompany.name, bn.busNumber")
     List<BusNumber> findAllActiveOrderedByCompanyAndBusNumber();
 }

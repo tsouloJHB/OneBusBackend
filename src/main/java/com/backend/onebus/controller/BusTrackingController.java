@@ -405,6 +405,12 @@ public class BusTrackingController {
             if (routeUpdateDTO.getActive() != null) {
                 existingRoute.setActive(routeUpdateDTO.getActive());
             }
+            if (routeUpdateDTO.getStartPoint() != null) {
+                existingRoute.setStartPoint(routeUpdateDTO.getStartPoint());
+            }
+            if (routeUpdateDTO.getEndPoint() != null) {
+                existingRoute.setEndPoint(routeUpdateDTO.getEndPoint());
+            }
             
             logger.info("Saving route...");
             // Save the updated route first
@@ -724,6 +730,87 @@ public class BusTrackingController {
         } catch (Exception e) {
             logger.error("Error in WebSocket test endpoint: {}", e.getMessage());
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/routes/{routeId}/stops")
+    @Operation(summary = "Create a new bus stop for a route", description = "Create a new bus stop and add it to the specified route")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "201", description = "Stop created successfully"),
+        @ApiResponse(responseCode = "400", description = "Invalid input data"),
+        @ApiResponse(responseCode = "404", description = "Route not found"),
+        @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    public ResponseEntity<?> createBusStop(
+            @Parameter(description = "ID of the route to add the stop to", required = true)
+            @PathVariable Long routeId,
+            @Parameter(description = "Bus stop creation data", required = true)
+            @Valid @RequestBody RouteStopUpdateDTO stopDTO) {
+        try {
+            logger.info("Creating new bus stop for route {}", routeId);
+
+            // Verify route exists
+            Optional<Route> routeOptional = routeRepository.findById(routeId);
+            if (routeOptional.isEmpty()) {
+                return ResponseEntity.notFound().build();
+            }
+
+            Route route = routeOptional.get();
+
+            // Validate required fields for new stop
+            if (stopDTO.getLatitude() == null || stopDTO.getLongitude() == null) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Latitude and longitude are required for new stops"));
+            }
+
+            // Create new stop
+            RouteStop routeStop = new RouteStop();
+            routeStop.setRoute(route);
+            routeStop.setLatitude(stopDTO.getLatitude());
+            routeStop.setLongitude(stopDTO.getLongitude());
+
+            if (stopDTO.getAddress() != null) {
+                routeStop.setAddress(stopDTO.getAddress());
+            }
+            if (stopDTO.getBusStopIndex() != null) {
+                // Handle index conflicts - shift existing stops if necessary
+                handleBusStopIndexConflict(routeId, stopDTO.getBusStopIndex(), null, stopDTO.getDirection());
+                routeStop.setBusStopIndex(stopDTO.getBusStopIndex());
+            }
+            if (stopDTO.getDirection() != null) {
+                routeStop.setDirection(stopDTO.getDirection());
+            }
+            if (stopDTO.getType() != null) {
+                routeStop.setType(stopDTO.getType());
+            }
+            if (stopDTO.getNorthboundIndex() != null) {
+                routeStop.setNorthboundIndex(stopDTO.getNorthboundIndex());
+            }
+            if (stopDTO.getSouthboundIndex() != null) {
+                routeStop.setSouthboundIndex(stopDTO.getSouthboundIndex());
+            }
+
+            // Save the new stop
+            RouteStop savedStop = routeStopRepository.save(routeStop);
+            logger.info("Successfully created bus stop {} for route {}", savedStop.getId(), routeId);
+
+            return ResponseEntity.status(HttpStatus.CREATED).body(Map.of(
+                "message", "Bus stop created successfully",
+                "stopId", savedStop.getId(),
+                "routeId", routeId,
+                "stop", Map.of(
+                    "id", savedStop.getId(),
+                    "latitude", savedStop.getLatitude(),
+                    "longitude", savedStop.getLongitude(),
+                    "address", savedStop.getAddress(),
+                    "busStopIndex", savedStop.getBusStopIndex(),
+                    "direction", savedStop.getDirection(),
+                    "type", savedStop.getType()
+                )
+            ));
+        } catch (Exception e) {
+            logger.error("Failed to create bus stop for route {}: {}", routeId, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Failed to create bus stop: " + e.getMessage()));
         }
     }
 

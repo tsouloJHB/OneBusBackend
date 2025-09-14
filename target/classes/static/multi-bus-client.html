@@ -121,11 +121,11 @@
     
     <div class="container">
         <div class="client-panel">
-            <h3>👤 Client 1 - Bus 101 Northbound</h3>
+            <h3>👤 Client 1 - Bus C5 Northbound</h3>
             <div class="subscription-controls">
                 <div class="form-group">
                     <label>Bus Number:</label>
-                    <input type="text" id="bus1Number" value="101" readonly>
+                    <input type="text" id="bus1Number" value="C5">
                 </div>
                 <div class="form-group">
                     <label>Direction:</label>
@@ -138,6 +138,7 @@
                 </div>
                 <button id="subscribe1Btn" onclick="subscribeClient1()">Subscribe</button>
                 <button id="unsubscribe1Btn" onclick="unsubscribeClient1()" disabled>Unsubscribe</button>
+                <button onclick="testWebSocket1()" style="background-color: #ffc107; color: #000;">🧪 Test WebSocket</button>
             </div>
             <div id="status1"></div>
             <div id="busData1" class="bus-data">
@@ -146,23 +147,24 @@
         </div>
         
         <div class="client-panel">
-            <h3>👤 Client 2 - Bus 102 Eastbound</h3>
+            <h3>👤 Client 2 - Bus C5 Southbound</h3>
             <div class="subscription-controls">
                 <div class="form-group">
                     <label>Bus Number:</label>
-                    <input type="text" id="bus2Number" value="102" readonly>
+                    <input type="text" id="bus2Number" value="C5">
                 </div>
                 <div class="form-group">
                     <label>Direction:</label>
                     <select id="bus2Direction">
                         <option value="Northbound">Northbound</option>
-                        <option value="Southbound">Southbound</option>
-                        <option value="Eastbound" selected>Eastbound</option>
+                        <option value="Southbound" selected>Southbound</option>
+                        <option value="Eastbound">Eastbound</option>
                         <option value="Westbound">Westbound</option>
                     </select>
                 </div>
                 <button id="subscribe2Btn" onclick="subscribeClient2()">Subscribe</button>
                 <button id="unsubscribe2Btn" onclick="unsubscribeClient2()" disabled>Unsubscribe</button>
+                <button onclick="testWebSocket2()" style="background-color: #ffc107; color: #000;">🧪 Test WebSocket</button>
             </div>
             <div id="status2"></div>
             <div id="busData2" class="bus-data">
@@ -184,10 +186,18 @@
                 console.log('Connected: ' + frame);
                 updateConnectionStatus(true);
                 
+                // Test the connection by sending a test message
+                console.log('WebSocket connection established successfully');
+                
                 // Subscribe to subscription status messages
                 stompClient.subscribe('/user/topic/subscription/status', function (message) {
                     const response = JSON.parse(message.body);
                     console.log('Subscription status:', response);
+                    if (response.status === 'success') {
+                        console.log('Successfully subscribed to:', response.busNumber, response.direction);
+                    } else {
+                        console.error('Subscription failed:', response.message);
+                    }
                 });
             }, function (error) {
                 console.log('STOMP error: ' + error);
@@ -220,9 +230,11 @@
                 subscription1.unsubscribe();
             }
             
-            // Subscribe to bus updates
+            // Subscribe to bus updates (using global topic)
             const topic = `/topic/bus/${busNumber}_${direction}`;
+            console.log('Client 1 subscribing to topic:', topic);
             subscription1 = stompClient.subscribe(topic, function (message) {
+                console.log('Client 1 received message:', message.body);
                 const busData = JSON.parse(message.body);
                 displayBusData1(busData);
             });
@@ -276,9 +288,11 @@
                 subscription2.unsubscribe();
             }
             
-            // Subscribe to bus updates
+            // Subscribe to bus updates (using global topic)
             const topic = `/topic/bus/${busNumber}_${direction}`;
+            console.log('Client 2 subscribing to topic:', topic);
             subscription2 = stompClient.subscribe(topic, function (message) {
+                console.log('Client 2 received message:', message.body);
                 const busData = JSON.parse(message.body);
                 displayBusData2(busData);
             });
@@ -333,23 +347,79 @@
         function displayBusData1(busData) {
             const dataDiv = document.getElementById('busData1');
             const timestamp = new Date().toLocaleTimeString();
-            const update = `[${timestamp}] Bus Update:\n${JSON.stringify(busData, null, 2)}\n\n`;
-            dataDiv.textContent = update + dataDiv.textContent;
-            
+            let info = '';
+            if (busData.busStopIndex !== undefined && busData.busStopIndex !== null) {
+                info += `Stop Index: <b>${busData.busStopIndex}</b>\n`;
+            }
+            if (busData.tripDirection !== undefined && busData.tripDirection !== null) {
+                info += `Direction: <b>${busData.tripDirection}</b>\n`;
+            }
+            const update = `[${timestamp}] Bus Update:\n${info}${JSON.stringify(busData, null, 2)}\n\n`;
+            dataDiv.innerHTML = update.replace(/\n/g, '<br>') + dataDiv.innerHTML;
             // Keep only last 5 updates
-            const updates = dataDiv.textContent.split('\n\n').slice(0, 5);
-            dataDiv.textContent = updates.join('\n\n');
+            const updates = dataDiv.innerHTML.split('<br><br>').slice(0, 5);
+            dataDiv.innerHTML = updates.join('<br><br>');
         }
         
         function displayBusData2(busData) {
             const dataDiv = document.getElementById('busData2');
             const timestamp = new Date().toLocaleTimeString();
-            const update = `[${timestamp}] Bus Update:\n${JSON.stringify(busData, null, 2)}\n\n`;
-            dataDiv.textContent = update + dataDiv.textContent;
-            
+            let info = '';
+            if (busData.busStopIndex !== undefined && busData.busStopIndex !== null) {
+                info += `Stop Index: <b>${busData.busStopIndex}</b>\n`;
+            }
+            if (busData.tripDirection !== undefined && busData.tripDirection !== null) {
+                info += `Direction: <b>${busData.tripDirection}</b>\n`;
+            }
+            const update = `[${timestamp}] Bus Update:\n${info}${JSON.stringify(busData, null, 2)}\n\n`;
+            dataDiv.innerHTML = update.replace(/\n/g, '<br>') + dataDiv.innerHTML;
             // Keep only last 5 updates
-            const updates = dataDiv.textContent.split('\n\n').slice(0, 5);
-            dataDiv.textContent = updates.join('\n\n');
+            const updates = dataDiv.innerHTML.split('<br><br>').slice(0, 5);
+            dataDiv.innerHTML = updates.join('<br><br>');
+        }
+        
+        function testWebSocket1() {
+            if (!stompClient) {
+                alert('Not connected to server');
+                return;
+            }
+            
+            // Subscribe to test topic
+            const testSubscription = stompClient.subscribe('/user/topic/test', function (message) {
+                const response = JSON.parse(message.body);
+                console.log('Test message received:', response);
+                showStatus1('success', `Test message received: ${response.message}`);
+                testSubscription.unsubscribe();
+            });
+            
+            // Send test message
+            stompClient.send("/app/test", {}, JSON.stringify({
+                message: "Test from Client 1"
+            }));
+            
+            showStatus1('info', 'Sending test message...');
+        }
+        
+        function testWebSocket2() {
+            if (!stompClient) {
+                alert('Not connected to server');
+                return;
+            }
+            
+            // Subscribe to test topic
+            const testSubscription = stompClient.subscribe('/user/topic/test', function (message) {
+                const response = JSON.parse(message.body);
+                console.log('Test message received:', response);
+                showStatus2('success', `Test message received: ${response.message}`);
+                testSubscription.unsubscribe();
+            });
+            
+            // Send test message
+            stompClient.send("/app/test", {}, JSON.stringify({
+                message: "Test from Client 2"
+            }));
+            
+            showStatus2('info', 'Sending test message...');
         }
         
         // Connect when page loads

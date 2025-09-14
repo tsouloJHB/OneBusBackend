@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Bus Selection Rule Simulator</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 2em; }
+        .bus-list { margin-bottom: 1em; }
+        .bus-row { margin-bottom: 0.5em; }
+        .result { margin-top: 1em; font-weight: bold; color: #2a7a2a; }
+        .error { color: #b00; }
+    </style>
+</head>
+<body>
+    <h2>Bus Selection Rule Simulator</h2>
+    <form id="simForm" onsubmit="return false;">
+        <label>Route: <input type="text" id="route" value="C6" required></label><br><br>
+        <label>Requested Direction:
+            <select id="direction">
+                <option value="Northbound">Northbound</option>
+                <option value="Southbound">Southbound</option>
+            </select>
+        </label><br><br>
+        <label>Client Stop Index: <input type="number" id="clientIndex" value="1" min="0" required></label><br><br>
+        <div class="bus-list" id="busList">
+            <h4>Available Buses</h4>
+            <div id="buses"></div>
+            <button type="button" onclick="addBus()">Add Bus</button>
+        </div>
+        <button type="button" onclick="simulateSelection()">Simulate Selection</button>
+    </form>
+    <div class="result" id="result"></div>
+    <script>
+        let busCount = 0;
+        function addBus() {
+            const busesDiv = document.getElementById('buses');
+            const row = document.createElement('div');
+            row.className = 'bus-row';
+            row.innerHTML = `
+                <label>Bus ID: <input type="text" value="bus${busCount+1}" class="busId"></label>
+                <label>Direction:
+                    <select class="busDir">
+                        <option value="Northbound">Northbound</option>
+                        <option value="Southbound">Southbound</option>
+                    </select>
+                </label>
+                <label>Stop Index: <input type="number" value="${busCount+1}" class="busIdx" min="-1"></label>
+                <button type="button" onclick="this.parentNode.remove()">Remove</button>
+            `;
+            busesDiv.appendChild(row);
+            busCount++;
+        }
+        // Add two default buses
+        addBus(); addBus();
+
+        function simulateSelection() {
+            const route = document.getElementById('route').value.trim();
+            const direction = document.getElementById('direction').value;
+            const clientIndex = parseInt(document.getElementById('clientIndex').value, 10);
+            const busRows = document.querySelectorAll('.bus-row');
+            const buses = [];
+            busRows.forEach(row => {
+                const busId = row.querySelector('.busId').value.trim();
+                const busDir = row.querySelector('.busDir').value;
+                const busIdx = parseInt(row.querySelector('.busIdx').value, 10);
+                buses.push({ busId, busDir, busIdx });
+            });
+            // Apply selection rules
+            let suitableRequested = buses.filter(b => b.busDir === direction && b.busIdx >= clientIndex);
+            if (suitableRequested.length > 0) {
+                suitableRequested.sort((a, b) => Math.abs(a.busIdx - clientIndex) - Math.abs(b.busIdx - clientIndex));
+                showResult(`Selected bus: <b>${suitableRequested[0].busId}</b> (index: ${suitableRequested[0].busIdx}, direction: ${suitableRequested[0].busDir})`);
+                return;
+            }
+            // Fallback: opposite direction
+            const opposite = direction === 'Northbound' ? 'Southbound' : 'Northbound';
+            let suitableOpposite = buses.filter(b => b.busDir === opposite && b.busIdx >= 0);
+            if (suitableOpposite.length > 0) {
+                suitableOpposite.sort((a, b) => Math.abs(a.busIdx - clientIndex) - Math.abs(b.busIdx - clientIndex));
+                showResult(`Selected bus: <b>${suitableOpposite[0].busId}</b> (index: ${suitableOpposite[0].busIdx}, direction: ${suitableOpposite[0].busDir})`);
+                return;
+            }
+            // No buses available
+            showResult('No buses available for this route in either direction.', true);
+        }
+        function showResult(msg, error) {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = msg;
+            resultDiv.className = error ? 'result error' : 'result';
+        }
+    </script>
+</body>
+</html> 

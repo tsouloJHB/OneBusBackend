@@ -18,9 +18,11 @@ public class BusNumber {
     @Column(name = "bus_number", nullable = false, length = 20)
     private String busNumber;
     
-    @NotBlank(message = "Company name is required")
-    @Size(min = 2, max = 100, message = "Company name must be between 2 and 100 characters")
-    @Column(name = "company_name", nullable = false, length = 100)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "bus_company_id", nullable = false)
+    private BusCompany busCompany;
+    
+    @Transient
     private String companyName;
     
     @Size(max = 100, message = "Route name cannot exceed 100 characters")
@@ -67,9 +69,9 @@ public class BusNumber {
     public BusNumber() {}
     
     // Constructor with required fields
-    public BusNumber(String busNumber, String companyName) {
+    public BusNumber(String busNumber, BusCompany busCompany) {
         this.busNumber = busNumber;
-        this.companyName = companyName;
+        this.busCompany = busCompany;
     }
     
     @PrePersist
@@ -100,12 +102,12 @@ public class BusNumber {
         this.busNumber = busNumber;
     }
     
-    public String getCompanyName() {
-        return companyName;
+    public BusCompany getBusCompany() {
+        return busCompany;
     }
-    
-    public void setCompanyName(String companyName) {
-        this.companyName = companyName;
+
+    public void setBusCompany(BusCompany busCompany) {
+        this.busCompany = busCompany;
     }
     
     public String getRouteName() {
@@ -196,12 +198,21 @@ public class BusNumber {
         this.updatedAt = updatedAt;
     }
     
+    public String getCompanyName() {
+        return busCompany != null ? busCompany.getName() : null;
+    }
+    
+    public void setCompanyName(String companyName) {
+        // This is a read-only field populated from the relationship
+        // No-op setter to satisfy JSON serialization
+    }
+    
     @Override
     public String toString() {
         return "BusNumber{" +
                 "id=" + id +
                 ", busNumber='" + busNumber + '\'' +
-                ", companyName='" + companyName + '\'' +
+                ", busCompanyId='" + (busCompany != null ? busCompany.getId() : null) + '\'' +
                 ", routeName='" + routeName + '\'' +
                 ", startDestination='" + startDestination + '\'' +
                 ", endDestination='" + endDestination + '\'' +

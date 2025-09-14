@@ -125,7 +125,7 @@ public class BusNumberController {
         }
     }
     
-    @GetMapping("/company/{companyName}")
+    @GetMapping("/company/{busCompanyId}")
     @Operation(
         summary = "Get bus numbers by company name",
         description = "Retrieves all bus numbers for a specific company."
@@ -137,13 +137,13 @@ public class BusNumberController {
                 content = @Content(mediaType = "application/json"))
     })
     public ResponseEntity<List<BusNumberResponseDTO>> getBusNumbersByCompany(
-            @Parameter(description = "Company name", required = true)
-            @PathVariable String companyName) {
-        List<BusNumberResponseDTO> busNumbers = busNumberService.getBusNumbersByCompany(companyName);
+            @Parameter(description = "Company ID", required = true)
+            @PathVariable Long busCompanyId) {
+        List<BusNumberResponseDTO> busNumbers = busNumberService.getBusNumbersByCompany(busCompanyId);
         return ResponseEntity.ok(busNumbers);
     }
     
-    @GetMapping("/company/{companyName}/active")
+    @GetMapping("/company/{busCompanyId}/active")
     @Operation(
         summary = "Get active bus numbers by company name",
         description = "Retrieves all active bus numbers for a specific company."
@@ -155,9 +155,9 @@ public class BusNumberController {
                 content = @Content(mediaType = "application/json"))
     })
     public ResponseEntity<List<BusNumberResponseDTO>> getActiveBusNumbersByCompany(
-            @Parameter(description = "Company name", required = true)
-            @PathVariable String companyName) {
-        List<BusNumberResponseDTO> busNumbers = busNumberService.getActiveBusNumbersByCompany(companyName);
+            @Parameter(description = "Company ID", required = true)
+            @PathVariable Long busCompanyId) {
+        List<BusNumberResponseDTO> busNumbers = busNumberService.getActiveBusNumbersByCompany(busCompanyId);
         return ResponseEntity.ok(busNumbers);
     }
     
@@ -226,12 +226,12 @@ public class BusNumberController {
     })
     public ResponseEntity<List<BusNumberResponseDTO>> searchBusNumbersByCompany(
             @Parameter(description = "Company name to search for", required = true)
-            @RequestParam String companyName) {
-        List<BusNumberResponseDTO> busNumbers = busNumberService.searchBusNumbersByCompany(companyName);
+            @RequestParam String busCompanyId) {
+        List<BusNumberResponseDTO> busNumbers = busNumberService.searchBusNumbersByCompany(busCompanyId);
         return ResponseEntity.ok(busNumbers);
     }
     
-    @GetMapping("/company/{companyName}/count")
+    @GetMapping("/company/{busCompanyId}/count")
     @Operation(
         summary = "Get count of bus numbers by company",
         description = "Returns the count of bus numbers for a specific company."
@@ -242,11 +242,11 @@ public class BusNumberController {
                 content = @Content(mediaType = "application/json"))
     })
     public ResponseEntity<Map<String, Object>> countBusNumbersByCompany(
-            @Parameter(description = "Company name", required = true)
-            @PathVariable String companyName) {
-        Long count = busNumberService.countBusNumbersByCompany(companyName);
+            @Parameter(description = "Company ID", required = true)
+            @PathVariable Long busCompanyId) {
+        Long count = busNumberService.countBusNumbersByCompany(busCompanyId);
         Map<String, Object> response = Map.of(
-            "companyName", companyName,
+            "busCompanyId", busCompanyId,
             "count", count
         );
         return ResponseEntity.ok(response);
