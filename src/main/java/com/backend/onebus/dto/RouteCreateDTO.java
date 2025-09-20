@@ -1,6 +1,7 @@
 package com.backend.onebus.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import java.util.List;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import jakarta.validation.constraints.Pattern;
@@ -45,6 +46,9 @@ public class RouteCreateDTO {
     @Schema(description = "Route active status", example = "true")
     private Boolean active = true;
 
+    @Schema(description = "Optional list of stops to create with the route (includes busStopIndex)")
+    private List<RouteStopUpdateDTO> stops;
+
     // Constructors
     public RouteCreateDTO() {}
 
@@ -55,6 +59,9 @@ public class RouteCreateDTO {
         this.direction = direction;
         this.active = true;
     }
+
+    public List<RouteStopUpdateDTO> getStops() { return stops; }
+    public void setStops(List<RouteStopUpdateDTO> stops) { this.stops = stops; }
 
     // Getters and Setters
     public String getCompany() { return company; }

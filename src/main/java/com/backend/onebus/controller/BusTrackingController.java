@@ -27,6 +27,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
+import jakarta.transaction.Transactional;
 import java.util.Optional;
 
 import java.io.IOException;
@@ -282,7 +283,40 @@ public class BusTrackingController {
             Route savedRoute = routeRepository.save(newRoute);
             logger.info("Route created successfully with ID: {}", savedRoute.getId());
             
-            // Return the created route with a success message
+            // If stops were provided in the creation DTO, process and save them
+            List<Map<String, Object>> createdStops = new java.util.ArrayList<>();
+            if (routeCreateDTO.getStops() != null && !routeCreateDTO.getStops().isEmpty()) {
+                logger.info("Processing {} stops provided during route creation...", routeCreateDTO.getStops().size());
+                for (RouteStopUpdateDTO stopDTO : routeCreateDTO.getStops()) {
+                    // Validate coordinates for new stop
+                    if (stopDTO.getLatitude() == null || stopDTO.getLongitude() == null) {
+                        throw new IllegalArgumentException("New stops must have valid latitude and longitude coordinates");
+                    }
+
+                    // If a busStopIndex is provided, shift existing stops to avoid conflicts
+                    if (stopDTO.getBusStopIndex() != null) {
+                        handleBusStopIndexConflict(savedRoute.getId(), stopDTO.getBusStopIndex(), null, stopDTO.getDirection());
+                    }
+
+                    RouteStop routeStop = new RouteStop();
+                    routeStop.setRoute(savedRoute);
+                    routeStop.setLatitude(stopDTO.getLatitude());
+                    routeStop.setLongitude(stopDTO.getLongitude());
+                    if (stopDTO.getAddress() != null) routeStop.setAddress(stopDTO.getAddress());
+                    if (stopDTO.getBusStopIndex() != null) routeStop.setBusStopIndex(stopDTO.getBusStopIndex());
+                    if (stopDTO.getDirection() != null) routeStop.setDirection(stopDTO.getDirection());
+                    if (stopDTO.getType() != null) routeStop.setType(stopDTO.getType());
+                    if (stopDTO.getNorthboundIndex() != null) routeStop.setNorthboundIndex(stopDTO.getNorthboundIndex());
+                    if (stopDTO.getSouthboundIndex() != null) routeStop.setSouthboundIndex(stopDTO.getSouthboundIndex());
+
+                    RouteStop savedStop = routeStopRepository.save(routeStop);
+
+                    createdStops.add(createSafeStopMap(savedStop));
+                }
+                logger.info("Created {} stops for new route ID {}", createdStops.size(), savedRoute.getId());
+            }
+
+            // Return the created route with a success message and any created stops
             return ResponseEntity.status(HttpStatus.CREATED).body(Map.of(
                 "message", "Route created successfully",
                 "route", Map.of(
@@ -295,7 +329,8 @@ public class BusTrackingController {
                     "startPoint", savedRoute.getStartPoint() != null ? savedRoute.getStartPoint() : "",
                     "endPoint", savedRoute.getEndPoint() != null ? savedRoute.getEndPoint() : "",
                     "active", savedRoute.isActive()
-                )
+                ),
+                "stops", createdStops
             ));
             
         } catch (Exception e) {
@@ -450,9 +485,65 @@ public class BusTrackingController {
                         routeStop.setAddress(stopDTO.getAddress());
                     }
                     if (stopDTO.getBusStopIndex() != null) {
-                        // Handle index conflicts - shift existing stops if necessary
-                        handleBusStopIndexConflict(routeId, stopDTO.getBusStopIndex(), stopDTO.getId(), stopDTO.getDirection());
-                        routeStop.setBusStopIndex(stopDTO.getBusStopIndex());
+                        Integer newIndex = stopDTO.getBusStopIndex();
+
+                        if (stopDTO.getId() != null) {
+                            // Existing stop being updated: find its current index
+                            Integer oldIndex = existingStops.stream()
+                                    .filter(s -> s.getId().equals(stopDTO.getId()))
+                                    .map(RouteStop::getBusStopIndex)
+                                    .findFirst()
+                                    .orElse(null);
+
+                            if (oldIndex == null) {
+                                // If the existing stop has no index, treat as insertion
+                                handleBusStopIndexConflict(routeId, newIndex, stopDTO.getId(), stopDTO.getDirection());
+                            } else if (!oldIndex.equals(newIndex)) {
+                                logger.info("Moving stop id {} from index {} to {}", stopDTO.getId(), oldIndex, newIndex);
+
+                                // Move down the list (e.g., 1 -> 3): decrement intervening stops
+                                if (newIndex > oldIndex) {
+                                    List<RouteStop> toDecrement = existingStops.stream()
+                                            .filter(stop -> stop.getBusStopIndex() != null)
+                                            .filter(stop -> stop.getBusStopIndex() > oldIndex && stop.getBusStopIndex() <= newIndex)
+                                            .filter(stop -> !stop.getId().equals(stopDTO.getId()))
+                                            .filter(stop -> {
+                                                if (stopDTO.getDirection() == null) return true;
+                                                if (stop.getDirection() == null) return true;
+                                                return stop.getDirection().equals(stopDTO.getDirection()) || stop.getDirection().equals("bidirectional");
+                                            })
+                                            .collect(java.util.stream.Collectors.toList());
+
+                                    for (RouteStop s : toDecrement) {
+                                        s.setBusStopIndex(s.getBusStopIndex() - 1);
+                                        routeStopRepository.save(s);
+                                        logger.debug("Decremented stop {} to {}", s.getId(), s.getBusStopIndex());
+                                    }
+                                } else { // newIndex < oldIndex: move up the list, increment intervening stops
+                                    List<RouteStop> toIncrement = existingStops.stream()
+                                            .filter(stop -> stop.getBusStopIndex() != null)
+                                            .filter(stop -> stop.getBusStopIndex() >= newIndex && stop.getBusStopIndex() < oldIndex)
+                                            .filter(stop -> !stop.getId().equals(stopDTO.getId()))
+                                            .filter(stop -> {
+                                                if (stopDTO.getDirection() == null) return true;
+                                                if (stop.getDirection() == null) return true;
+                                                return stop.getDirection().equals(stopDTO.getDirection()) || stop.getDirection().equals("bidirectional");
+                                            })
+                                            .collect(java.util.stream.Collectors.toList());
+
+                                    for (RouteStop s : toIncrement) {
+                                        s.setBusStopIndex(s.getBusStopIndex() + 1);
+                                        routeStopRepository.save(s);
+                                        logger.debug("Incremented stop {} to {}", s.getId(), s.getBusStopIndex());
+                                    }
+                                }
+                            } // else no change
+                        } else {
+                            // New stop insertion: shift existing stops up starting from newIndex
+                            handleBusStopIndexConflict(routeId, newIndex, stopDTO.getId(), stopDTO.getDirection());
+                        }
+
+                        routeStop.setBusStopIndex(newIndex);
                     }
                     if (stopDTO.getDirection() != null) {
                         routeStop.setDirection(stopDTO.getDirection());
@@ -815,6 +906,7 @@ public class BusTrackingController {
     }
 
     @DeleteMapping("/routes/{routeId}/stops/{stopId}")
+    @Transactional
     @Operation(summary = "Delete a route stop", description = "Delete a specific stop from a route")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Stop deleted successfully"),
@@ -845,8 +937,23 @@ public class BusTrackingController {
                 return ResponseEntity.badRequest().body(Map.of("error", "Stop does not belong to the specified route"));
             }
             
+            Integer deletedIndex = stop.getBusStopIndex();
             routeStopRepository.delete(stop);
             logger.info("Successfully deleted stop {} from route {}", stopId, routeId);
+            
+            // Normalize indices after deletion - decrement all stops with higher indices
+            if (deletedIndex != null) {
+                List<RouteStop> remainingStops = routeStopRepository.findByRouteIdOrderByBusStopIndex(routeId);
+                for (RouteStop remainingStop : remainingStops) {
+                    Integer currentIndex = remainingStop.getBusStopIndex();
+                    if (currentIndex != null && currentIndex > deletedIndex) {
+                        remainingStop.setBusStopIndex(currentIndex - 1);
+                        routeStopRepository.save(remainingStop);
+                        logger.debug("Decremented stop {} index from {} to {}", 
+                                remainingStop.getId(), currentIndex, currentIndex - 1);
+                    }
+                }
+            }
             
             return ResponseEntity.ok(Map.of(
                 "message", "Stop deleted successfully",
@@ -857,6 +964,76 @@ public class BusTrackingController {
             logger.error("Failed to delete stop {} from route {}: {}", stopId, routeId, e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Map.of("error", "Failed to delete stop: " + e.getMessage()));
+        }
+    }
+
+    @PostMapping("/routes/{routeId}/stops/{stopId}/index")
+    @Operation(summary = "Update a stop's index", description = "Change a stop's busStopIndex and adjust other stops to avoid duplicates")
+    public ResponseEntity<?> updateRouteStopIndex(
+            @PathVariable Long routeId,
+            @PathVariable Long stopId,
+            @RequestBody Map<String, Integer> payload) {
+        try {
+            Integer newIndex = payload.get("busStopIndex");
+            if (newIndex == null) return ResponseEntity.badRequest().body(Map.of("error", "busStopIndex required"));
+
+            Optional<RouteStop> stopOptional = routeStopRepository.findById(stopId);
+            if (stopOptional.isEmpty()) return ResponseEntity.notFound().build();
+
+            RouteStop target = stopOptional.get();
+            if (!target.getRoute().getId().equals(routeId)) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", "Stop does not belong to route"));
+            }
+
+            List<RouteStop> existingStops = routeStopRepository.findByRouteIdOrderByBusStopIndex(routeId);
+            Integer oldIndex = target.getBusStopIndex();
+
+            if (oldIndex == null) {
+                // treat as insertion
+                handleBusStopIndexConflict(routeId, newIndex, stopId, target.getDirection());
+            } else if (!oldIndex.equals(newIndex)) {
+                if (newIndex > oldIndex) {
+                    List<RouteStop> toDecrement = existingStops.stream()
+                            .filter(s -> s.getBusStopIndex() != null)
+                            .filter(s -> s.getBusStopIndex() > oldIndex && s.getBusStopIndex() <= newIndex)
+                            .filter(s -> !s.getId().equals(stopId))
+                            .filter(s -> {
+                                if (target.getDirection() == null) return true;
+                                if (s.getDirection() == null) return true;
+                                return s.getDirection().equals(target.getDirection()) || s.getDirection().equals("bidirectional");
+                            })
+                            .collect(java.util.stream.Collectors.toList());
+
+                    for (RouteStop s : toDecrement) {
+                        s.setBusStopIndex(s.getBusStopIndex() - 1);
+                        routeStopRepository.save(s);
+                    }
+                } else {
+                    List<RouteStop> toIncrement = existingStops.stream()
+                            .filter(s -> s.getBusStopIndex() != null)
+                            .filter(s -> s.getBusStopIndex() >= newIndex && s.getBusStopIndex() < oldIndex)
+                            .filter(s -> !s.getId().equals(stopId))
+                            .filter(s -> {
+                                if (target.getDirection() == null) return true;
+                                if (s.getDirection() == null) return true;
+                                return s.getDirection().equals(target.getDirection()) || s.getDirection().equals("bidirectional");
+                            })
+                            .collect(java.util.stream.Collectors.toList());
+
+                    for (RouteStop s : toIncrement) {
+                        s.setBusStopIndex(s.getBusStopIndex() + 1);
+                        routeStopRepository.save(s);
+                    }
+                }
+            }
+
+            target.setBusStopIndex(newIndex);
+            routeStopRepository.save(target);
+
+            return ResponseEntity.ok(Map.of("message", "Stop index updated", "stopId", stopId, "busStopIndex", newIndex));
+        } catch (Exception e) {
+            logger.error("Failed to update stop index {} for route {}: {}", stopId, routeId, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("error", e.getMessage()));
         }
     }
 }
