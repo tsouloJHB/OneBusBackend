@@ -13,8 +13,10 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.Optional;
@@ -45,6 +47,55 @@ public class BusCompanyController {
             @Valid @RequestBody BusCompanyCreateDTO createDTO) {
         try {
             BusCompanyResponseDTO createdCompany = busCompanyService.createBusCompany(createDTO);
+            return ResponseEntity.status(HttpStatus.CREATED).body(createdCompany);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new ErrorResponse("An error occurred while creating the bus company"));
+        }
+    }
+    
+    @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(
+        summary = "Create a new bus company with image",
+        description = "Creates a new bus company with the provided details and an optional image file. Registration number and company code must be unique."
+    )
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "201", description = "Bus company created successfully",
+                content = @Content(mediaType = "application/json", schema = @Schema(implementation = BusCompanyResponseDTO.class))),
+        @ApiResponse(responseCode = "400", description = "Invalid input data, duplicate registration number/company code, or invalid image file",
+                content = @Content(mediaType = "application/json")),
+        @ApiResponse(responseCode = "500", description = "Internal server error",
+                content = @Content(mediaType = "application/json"))
+    })
+    public ResponseEntity<?> createBusCompanyWithImage(
+            @Parameter(description = "Company name", required = true) @RequestParam String name,
+            @Parameter(description = "Registration number", required = true) @RequestParam String registrationNumber,
+            @Parameter(description = "Company code", required = true) @RequestParam String companyCode,
+            @Parameter(description = "Email address") @RequestParam(required = false) String email,
+            @Parameter(description = "Phone number") @RequestParam(required = false) String phone,
+            @Parameter(description = "Address") @RequestParam(required = false) String address,
+            @Parameter(description = "City") @RequestParam(required = false) String city,
+            @Parameter(description = "Postal code") @RequestParam(required = false) String postalCode,
+            @Parameter(description = "Country") @RequestParam(required = false) String country,
+            @Parameter(description = "Is active") @RequestParam(required = false, defaultValue = "true") Boolean isActive,
+            @Parameter(description = "Company logo image") @RequestParam(required = false) MultipartFile image) {
+        try {
+            // Create DTO from request parameters
+            BusCompanyCreateDTO createDTO = new BusCompanyCreateDTO();
+            createDTO.setName(name);
+            createDTO.setRegistrationNumber(registrationNumber);
+            createDTO.setCompanyCode(companyCode);
+            createDTO.setEmail(email);
+            createDTO.setPhone(phone);
+            createDTO.setAddress(address);
+            createDTO.setCity(city);
+            createDTO.setPostalCode(postalCode);
+            createDTO.setCountry(country);
+            createDTO.setIsActive(isActive);
+            
+            BusCompanyResponseDTO createdCompany = busCompanyService.createBusCompanyWithImage(createDTO, image);
             return ResponseEntity.status(HttpStatus.CREATED).body(createdCompany);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
@@ -228,6 +279,58 @@ public class BusCompanyController {
             @Valid @RequestBody BusCompanyCreateDTO updateDTO) {
         try {
             BusCompanyResponseDTO updatedCompany = busCompanyService.updateBusCompany(id, updateDTO);
+            return ResponseEntity.ok(updatedCompany);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new ErrorResponse("An error occurred while updating the bus company"));
+        }
+    }
+    
+    @PutMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(
+        summary = "Update bus company with image",
+        description = "Updates an existing bus company with the provided details and an optional new image file."
+    )
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Bus company updated successfully",
+                content = @Content(mediaType = "application/json", schema = @Schema(implementation = BusCompanyResponseDTO.class))),
+        @ApiResponse(responseCode = "400", description = "Invalid input data, duplicate registration number/company code, or invalid image file",
+                content = @Content(mediaType = "application/json")),
+        @ApiResponse(responseCode = "404", description = "Bus company not found",
+                content = @Content(mediaType = "application/json")),
+        @ApiResponse(responseCode = "500", description = "Internal server error",
+                content = @Content(mediaType = "application/json"))
+    })
+    public ResponseEntity<?> updateBusCompanyWithImage(
+            @Parameter(description = "Bus company ID", required = true) @PathVariable Long id,
+            @Parameter(description = "Company name") @RequestParam(required = false) String name,
+            @Parameter(description = "Registration number") @RequestParam(required = false) String registrationNumber,
+            @Parameter(description = "Company code") @RequestParam(required = false) String companyCode,
+            @Parameter(description = "Email address") @RequestParam(required = false) String email,
+            @Parameter(description = "Phone number") @RequestParam(required = false) String phone,
+            @Parameter(description = "Address") @RequestParam(required = false) String address,
+            @Parameter(description = "City") @RequestParam(required = false) String city,
+            @Parameter(description = "Postal code") @RequestParam(required = false) String postalCode,
+            @Parameter(description = "Country") @RequestParam(required = false) String country,
+            @Parameter(description = "Is active") @RequestParam(required = false) Boolean isActive,
+            @Parameter(description = "New company logo image") @RequestParam(required = false) MultipartFile image) {
+        try {
+            // Create DTO from request parameters (only include non-null values)
+            BusCompanyCreateDTO updateDTO = new BusCompanyCreateDTO();
+            if (name != null) updateDTO.setName(name);
+            if (registrationNumber != null) updateDTO.setRegistrationNumber(registrationNumber);
+            if (companyCode != null) updateDTO.setCompanyCode(companyCode);
+            if (email != null) updateDTO.setEmail(email);
+            if (phone != null) updateDTO.setPhone(phone);
+            if (address != null) updateDTO.setAddress(address);
+            if (city != null) updateDTO.setCity(city);
+            if (postalCode != null) updateDTO.setPostalCode(postalCode);
+            if (country != null) updateDTO.setCountry(country);
+            if (isActive != null) updateDTO.setIsActive(isActive);
+            
+            BusCompanyResponseDTO updatedCompany = busCompanyService.updateBusCompanyWithImage(id, updateDTO, image);
             return ResponseEntity.ok(updatedCompany);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));

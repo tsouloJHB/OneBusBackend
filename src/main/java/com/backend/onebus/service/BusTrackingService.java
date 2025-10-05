@@ -205,7 +205,7 @@ public class BusTrackingService {
             for (GeoResult<RedisGeoCommands.GeoLocation<Object>> result : results) {
                 String busId = (String) result.getContent().getName();
                 BusLocation location = (BusLocation) redisTemplate.opsForValue().get(BUS_LOCATION_KEY + busId);
-                if (location != null && tripDirection.equals(location.getTripDirection())) {
+                if (location != null && tripDirection.equalsIgnoreCase(location.getTripDirection())) {
                     return location;
                 }
             }
@@ -244,8 +244,8 @@ public class BusTrackingService {
             for (String key : keys) {
                 BusLocation location = (BusLocation) redisTemplate.opsForValue().get(key);
                 if (location != null && 
-                    busNumber.equals(location.getBusNumber()) && 
-                    direction.equals(location.getTripDirection())) {
+                    busNumber.equalsIgnoreCase(location.getBusNumber()) && 
+                    direction.equalsIgnoreCase(location.getTripDirection())) {
                     return location;
                 }
             }

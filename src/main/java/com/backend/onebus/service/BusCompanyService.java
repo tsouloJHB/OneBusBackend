@@ -9,7 +9,9 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -20,6 +22,9 @@ public class BusCompanyService {
     
     @Autowired
     private BusCompanyRepository busCompanyRepository;
+    
+    @Autowired
+    private FileStorageService fileStorageService;
     
     /**
      * Create a new bus company
@@ -197,6 +202,129 @@ public class BusCompanyService {
         busCompanyRepository.deleteById(id);
     }
     
+    /**
+     * Create a new bus company with image
+     */
+    public BusCompanyResponseDTO createBusCompanyWithImage(BusCompanyCreateDTO createDTO, MultipartFile image) {
+        // Check if registration number already exists
+        if (busCompanyRepository.existsByRegistrationNumber(createDTO.getRegistrationNumber())) {
+            throw new IllegalArgumentException("Registration number already exists: " + createDTO.getRegistrationNumber());
+        }
+        
+        // Check if company code already exists
+        if (busCompanyRepository.existsByCompanyCode(createDTO.getCompanyCode())) {
+            throw new IllegalArgumentException("Company code already exists: " + createDTO.getCompanyCode());
+        }
+        
+        // Check if email already exists (if provided)
+        if (createDTO.getEmail() != null && !createDTO.getEmail().trim().isEmpty()) {
+            Optional<BusCompany> existingByEmail = busCompanyRepository.findByEmailIgnoreCase(createDTO.getEmail());
+            if (existingByEmail.isPresent()) {
+                throw new IllegalArgumentException("Email already exists: " + createDTO.getEmail());
+            }
+        }
+        
+        // Convert DTO to entity
+        BusCompany busCompany = convertCreateDTOToEntity(createDTO);
+        
+        // Handle image upload
+        if (image != null && !image.isEmpty()) {
+            try {
+                // Validate image file
+                if (!fileStorageService.isValidImageFile(image)) {
+                    throw new IllegalArgumentException("Invalid image file type. Only JPEG, PNG, GIF, and WebP are allowed.");
+                }
+                
+                // Check file size (max 10MB)
+                if (fileStorageService.getFileSizeInMB(image) > 10) {
+                    throw new IllegalArgumentException("Image file size must be less than 10MB");
+                }
+                
+                String imagePath = fileStorageService.storeImage(image);
+                busCompany.setImagePath(imagePath);
+            } catch (IOException e) {
+                throw new RuntimeException("Failed to store image file: " + e.getMessage());
+            }
+        }
+        
+        // Save the entity
+        BusCompany savedCompany = busCompanyRepository.save(busCompany);
+        
+        // Convert and return response DTO
+        return convertEntityToResponseDTO(savedCompany);
+    }
+    
+    /**
+     * Update bus company with image
+     */
+    public BusCompanyResponseDTO updateBusCompanyWithImage(Long id, BusCompanyCreateDTO updateDTO, MultipartFile image) {
+        Optional<BusCompany> existingCompanyOpt = busCompanyRepository.findById(id);
+        if (existingCompanyOpt.isEmpty()) {
+            throw new IllegalArgumentException("Bus company not found with ID: " + id);
+        }
+        
+        BusCompany existingCompany = existingCompanyOpt.get();
+        
+        // Check for duplicate registration number (if changed)
+        if (updateDTO.getRegistrationNumber() != null && 
+            !updateDTO.getRegistrationNumber().equals(existingCompany.getRegistrationNumber())) {
+            if (busCompanyRepository.existsByRegistrationNumber(updateDTO.getRegistrationNumber())) {
+                throw new IllegalArgumentException("Registration number already exists: " + updateDTO.getRegistrationNumber());
+            }
+        }
+        
+        // Check for duplicate company code (if changed)
+        if (updateDTO.getCompanyCode() != null && 
+            !updateDTO.getCompanyCode().equals(existingCompany.getCompanyCode())) {
+            if (busCompanyRepository.existsByCompanyCode(updateDTO.getCompanyCode())) {
+                throw new IllegalArgumentException("Company code already exists: " + updateDTO.getCompanyCode());
+            }
+        }
+        
+        // Check for duplicate email (if changed)
+        if (updateDTO.getEmail() != null && !updateDTO.getEmail().trim().isEmpty() &&
+            !updateDTO.getEmail().equals(existingCompany.getEmail())) {
+            Optional<BusCompany> existingByEmail = busCompanyRepository.findByEmailIgnoreCase(updateDTO.getEmail());
+            if (existingByEmail.isPresent()) {
+                throw new IllegalArgumentException("Email already exists: " + updateDTO.getEmail());
+            }
+        }
+        
+        // Update fields if provided
+        updateEntityFromDTOSelective(existingCompany, updateDTO);
+        
+        // Handle image upload
+        if (image != null && !image.isEmpty()) {
+            try {
+                // Validate image file
+                if (!fileStorageService.isValidImageFile(image)) {
+                    throw new IllegalArgumentException("Invalid image file type. Only JPEG, PNG, GIF, and WebP are allowed.");
+                }
+                
+                // Check file size (max 10MB)
+                if (fileStorageService.getFileSizeInMB(image) > 10) {
+                    throw new IllegalArgumentException("Image file size must be less than 10MB");
+                }
+                
+                // Delete old image if exists
+                if (existingCompany.getImagePath() != null) {
+                    fileStorageService.deleteImage(existingCompany.getImagePath());
+                }
+                
+                String newImagePath = fileStorageService.storeImage(image);
+                existingCompany.setImagePath(newImagePath);
+            } catch (IOException e) {
+                throw new RuntimeException("Failed to store image file: " + e.getMessage());
+            }
+        }
+        
+        // Save the updated entity
+        BusCompany updatedCompany = busCompanyRepository.save(existingCompany);
+        
+        // Convert and return response DTO
+        return convertEntityToResponseDTO(updatedCompany);
+    }
+    
     // Helper methods for conversion
     private BusCompany convertCreateDTOToEntity(BusCompanyCreateDTO dto) {
         BusCompany entity = new BusCompany();
@@ -225,6 +353,8 @@ public class BusCompanyService {
         dto.setCity(entity.getCity());
         dto.setPostalCode(entity.getPostalCode());
         dto.setCountry(entity.getCountry());
+        dto.setImagePath(entity.getImagePath());
+        dto.setImageUrl(fileStorageService.getImageUrl(entity.getImagePath()));
         dto.setIsActive(entity.getIsActive());
         dto.setCreatedAt(entity.getCreatedAt());
         dto.setUpdatedAt(entity.getUpdatedAt());
@@ -252,5 +382,18 @@ public class BusCompanyService {
         if (dto.getIsActive() != null) {
             entity.setIsActive(dto.getIsActive());
         }
+    }
+    
+    private void updateEntityFromDTOSelective(BusCompany entity, BusCompanyCreateDTO dto) {
+        if (dto.getName() != null) entity.setName(dto.getName());
+        if (dto.getRegistrationNumber() != null) entity.setRegistrationNumber(dto.getRegistrationNumber());
+        if (dto.getCompanyCode() != null) entity.setCompanyCode(dto.getCompanyCode());
+        if (dto.getEmail() != null) entity.setEmail(dto.getEmail());
+        if (dto.getPhone() != null) entity.setPhone(dto.getPhone());
+        if (dto.getAddress() != null) entity.setAddress(dto.getAddress());
+        if (dto.getCity() != null) entity.setCity(dto.getCity());
+        if (dto.getPostalCode() != null) entity.setPostalCode(dto.getPostalCode());
+        if (dto.getCountry() != null) entity.setCountry(dto.getCountry());
+        if (dto.getIsActive() != null) entity.setIsActive(dto.getIsActive());
     }
 }

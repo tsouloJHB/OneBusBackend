@@ -27,6 +27,8 @@ public class BusStreamingService {
     
     // Track active subscriptions: Map<busNumber_direction, Set<sessionId>>
     private final Map<String, Set<String>> activeSubscriptions = new ConcurrentHashMap<>();
+    // Map canonical (lowercase) subscription key -> original subscriptionKey(s)
+    private final Map<String, Set<String>> canonicalToOriginalKeys = new ConcurrentHashMap<>();
     
     // Track specific bus subscriptions: Map<busId, Set<sessionId>>
     private final Map<String, Set<String>> specificBusSubscriptions = new ConcurrentHashMap<>();
@@ -40,6 +42,9 @@ public class BusStreamingService {
     public void subscribeToBus(String sessionId, String busNumber, String direction) {
         String subscriptionKey = busNumber + "_" + direction;
         activeSubscriptions.computeIfAbsent(subscriptionKey, k -> ConcurrentHashMap.newKeySet()).add(sessionId);
+        // Also register the canonical key mapping
+        String canonical = (busNumber + "_" + direction).toLowerCase();
+        canonicalToOriginalKeys.computeIfAbsent(canonical, k -> ConcurrentHashMap.newKeySet()).add(subscriptionKey);
         logger.info("Client {} subscribed to bus {} direction {} (key: {})", sessionId, busNumber, direction, subscriptionKey);
         logger.debug("Current active subscriptions: {}", activeSubscriptions.keySet());
         
@@ -64,6 +69,13 @@ public class BusStreamingService {
             subscribers.remove(sessionId);
             if (subscribers.isEmpty()) {
                 activeSubscriptions.remove(subscriptionKey);
+                // Remove from canonical mapping as well
+                String canonical = subscriptionKey.toLowerCase();
+                Set<String> originals = canonicalToOriginalKeys.get(canonical);
+                if (originals != null) {
+                    originals.remove(subscriptionKey);
+                    if (originals.isEmpty()) canonicalToOriginalKeys.remove(canonical);
+                }
             }
         }
         logger.info("Client {} unsubscribed from bus {} direction {}", sessionId, busNumber, direction);
@@ -135,8 +147,8 @@ public class BusStreamingService {
             for (String key : keys) {
                 BusLocation location = (BusLocation) redisTemplate.opsForValue().get(key);
                 if (location != null && 
-                    busNumber.equals(location.getBusNumber()) && 
-                    direction.equals(location.getTripDirection())) {
+                    busNumber.equalsIgnoreCase(location.getBusNumber()) && 
+                    direction.equalsIgnoreCase(location.getTripDirection())) {
                     return location;
                 }
             }
@@ -175,15 +187,22 @@ public class BusStreamingService {
         // Also broadcast to route-based subscribers (for backward compatibility)
         if (location.getBusNumber() != null && location.getTripDirection() != null) {
             String subscriptionKey = location.getBusNumber() + "_" + location.getTripDirection();
-            Set<String> routeSubscribers = activeSubscriptions.get(subscriptionKey);
-            
-            if (routeSubscribers != null && !routeSubscribers.isEmpty()) {
-                logger.info("Broadcasting update for route {} {} to {} subscribers", 
-                            location.getBusNumber(), location.getTripDirection(), routeSubscribers.size());
-                logger.debug("Route subscribers: {}", routeSubscribers);
-                String destination = "/topic/bus/" + subscriptionKey;
-                logger.debug("Broadcasting to destination: {}", destination);
-                messagingTemplate.convertAndSend(destination, location);
+
+            // Lookup by canonical key (lowercase) to find all original subscription keys
+            String canonical = subscriptionKey.toLowerCase();
+            Set<String> originals = canonicalToOriginalKeys.get(canonical);
+            if (originals != null && !originals.isEmpty()) {
+                for (String activeKey : originals) {
+                    Set<String> routeSubscribers = activeSubscriptions.get(activeKey);
+                    if (routeSubscribers != null && !routeSubscribers.isEmpty()) {
+                        logger.info("Broadcasting update for route {} {} to {} subscribers (matched key: {})", 
+                                    location.getBusNumber(), location.getTripDirection(), routeSubscribers.size(), activeKey);
+                        logger.debug("Route subscribers: {}", routeSubscribers);
+                        String destination = "/topic/bus/" + activeKey; // send to the stored key so clients receive it
+                        logger.debug("Broadcasting to destination: {}", destination);
+                        messagingTemplate.convertAndSend(destination, location);
+                    }
+                }
             } else {
                 logger.debug("No route subscribers found for key: {}", subscriptionKey);
                 logger.debug("Active subscriptions: {}", activeSubscriptions.keySet());

@@ -20,7 +20,7 @@ public class BusCompany {
     private String name;
     
     @NotBlank(message = "Registration number is required")
-    @Size(min = 5, max = 50, message = "Registration number must be between 5 and 50 characters")
+    @Size(min = 2, max = 50, message = "Registration number must be between 2 and 50 characters")
     @Column(name = "registration_number", nullable = false, unique = true, length = 50)
     private String registrationNumber;
     
@@ -33,7 +33,9 @@ public class BusCompany {
     @Column(name = "email", length = 100)
     private String email;
     
-    @Pattern(regexp = "^[+]?[0-9]{10,15}$", message = "Please provide a valid phone number")
+    // Allow digits and common phone punctuation (spaces, hyphens, parentheses), optional leading +
+    // Minimum 7 and maximum 20 characters overall (digits + punctuation)
+    @Pattern(regexp = "^[+]?[0-9()\\-\\s]{7,20}$", message = "Please provide a valid phone number")
     @Column(name = "phone", length = 20)
     private String phone;
     
@@ -52,6 +54,10 @@ public class BusCompany {
     @Size(max = 50, message = "Country cannot exceed 50 characters")
     @Column(name = "country", length = 50)
     private String country;
+    
+    @Size(max = 255, message = "Image path cannot exceed 255 characters")
+    @Column(name = "image_path", length = 255)
+    private String imagePath;
     
     @Column(name = "is_active", nullable = false)
     private Boolean isActive = true;
@@ -170,6 +176,14 @@ public class BusCompany {
         this.country = country;
     }
     
+    public String getImagePath() {
+        return imagePath;
+    }
+    
+    public void setImagePath(String imagePath) {
+        this.imagePath = imagePath;
+    }
+    
     public Boolean getIsActive() {
         return isActive;
     }
@@ -212,6 +226,7 @@ public class BusCompany {
                 ", email='" + email + '\'' +
                 ", phone='" + phone + '\'' +
                 ", city='" + city + '\'' +
+                ", imagePath='" + imagePath + '\'' +
                 ", isActive=" + isActive +
                 '}';
     }

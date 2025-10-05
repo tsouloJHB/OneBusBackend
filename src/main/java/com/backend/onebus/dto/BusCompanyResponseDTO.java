@@ -15,6 +15,8 @@ public class BusCompanyResponseDTO {
     private String city;
     private String postalCode;
     private String country;
+    private String imagePath;
+    private String imageUrl;
     private Boolean isActive;
     private Long busCount;
     
@@ -114,6 +116,22 @@ public class BusCompanyResponseDTO {
     
     public void setCountry(String country) {
         this.country = country;
+    }
+    
+    public String getImagePath() {
+        return imagePath;
+    }
+    
+    public void setImagePath(String imagePath) {
+        this.imagePath = imagePath;
+    }
+    
+    public String getImageUrl() {
+        return imageUrl;
+    }
+    
+    public void setImageUrl(String imageUrl) {
+        this.imageUrl = imageUrl;
     }
     
     public Boolean getIsActive() {

@@ -9,7 +9,7 @@ public class BusCompanyCreateDTO {
     private String name;
     
     @NotBlank(message = "Registration number is required")
-    @Size(min = 5, max = 50, message = "Registration number must be between 5 and 50 characters")
+    @Size(min = 2, max = 50, message = "Registration number must be between 2 and 50 characters")
     private String registrationNumber;
     
     @NotBlank(message = "Company code is required")
@@ -19,7 +19,9 @@ public class BusCompanyCreateDTO {
     @Email(message = "Please provide a valid email address")
     private String email;
     
-    @Pattern(regexp = "^[+]?[0-9]{10,15}$", message = "Please provide a valid phone number")
+    // Allow digits and common phone punctuation (spaces, hyphens, parentheses), optional leading +
+    // Minimum 7 and maximum 20 characters overall (digits + punctuation)
+    @Pattern(regexp = "^[+]?[0-9()\\-\\s]{7,20}$", message = "Please provide a valid phone number")
     private String phone;
     
     @Size(max = 200, message = "Address cannot exceed 200 characters")

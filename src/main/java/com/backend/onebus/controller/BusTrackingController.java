@@ -3,6 +3,8 @@ package com.backend.onebus.controller;
 import com.backend.onebus.dto.RouteUpdateDTO;
 import com.backend.onebus.dto.RouteStopUpdateDTO;
 import com.backend.onebus.dto.RouteCreateDTO;
+import com.backend.onebus.dto.RegisteredBusCreateDTO;
+import com.backend.onebus.dto.RegisteredBusResponseDTO;
 import com.backend.onebus.model.Bus;
 import com.backend.onebus.model.BusLocation;
 import com.backend.onebus.model.Route;
@@ -12,6 +14,7 @@ import com.backend.onebus.repository.RouteRepository;
 import com.backend.onebus.repository.RouteStopRepository;
 import com.backend.onebus.service.BusTrackingService;
 import com.backend.onebus.service.BusSelectionService;
+import com.backend.onebus.service.RegisteredBusService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.core.io.ClassPathResource;
@@ -51,6 +54,8 @@ public class BusTrackingController {
     private ObjectMapper objectMapper;
     @Autowired
     private BusSelectionService busSelectionService;
+    @Autowired
+    private RegisteredBusService registeredBusService;
     private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(BusTrackingController.class);
 
     @PostMapping("/tracker/payload")
@@ -1034,6 +1039,117 @@ public class BusTrackingController {
         } catch (Exception e) {
             logger.error("Failed to update stop index {} for route {}: {}", stopId, routeId, e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    // ==================== REGISTERED BUS ENDPOINTS ====================
+
+    @PostMapping("/registered-buses")
+    @Operation(summary = "Create registered bus", description = "Creates a new registered bus for a company")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "201", description = "Registered bus created successfully"),
+        @ApiResponse(responseCode = "400", description = "Invalid input data"),
+        @ApiResponse(responseCode = "404", description = "Company not found")
+    })
+    public ResponseEntity<RegisteredBusResponseDTO> createRegisteredBus(@Valid @RequestBody RegisteredBusCreateDTO createDTO) {
+        try {
+            RegisteredBusResponseDTO response = registeredBusService.createRegisteredBus(createDTO);
+            return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(null);
+        } catch (Exception e) {
+            logger.error("Failed to create registered bus: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
+        }
+    }
+
+    @PutMapping("/registered-buses/{id}")
+    @Operation(summary = "Update registered bus", description = "Updates an existing registered bus")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Registered bus updated successfully"),
+        @ApiResponse(responseCode = "400", description = "Invalid input data"),
+        @ApiResponse(responseCode = "404", description = "Registered bus not found")
+    })
+    public ResponseEntity<RegisteredBusResponseDTO> updateRegisteredBus(
+            @PathVariable Long id,
+            @Valid @RequestBody RegisteredBusCreateDTO updateDTO) {
+        try {
+            RegisteredBusResponseDTO response = registeredBusService.updateRegisteredBus(id, updateDTO);
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(null);
+        } catch (Exception e) {
+            logger.error("Failed to update registered bus {}: {}", id, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
+        }
+    }
+
+    @DeleteMapping("/registered-buses/{id}")
+    @Operation(summary = "Delete registered bus", description = "Deletes a registered bus")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "204", description = "Registered bus deleted successfully"),
+        @ApiResponse(responseCode = "404", description = "Registered bus not found")
+    })
+    public ResponseEntity<Void> deleteRegisteredBus(@PathVariable Long id) {
+        try {
+            registeredBusService.deleteRegisteredBus(id);
+            return ResponseEntity.noContent().build();
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.notFound().build();
+        } catch (Exception e) {
+            logger.error("Failed to delete registered bus {}: {}", id, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    @GetMapping("/registered-buses/{id}")
+    @Operation(summary = "Get registered bus", description = "Retrieves a registered bus by ID")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Registered bus retrieved successfully"),
+        @ApiResponse(responseCode = "404", description = "Registered bus not found")
+    })
+    public ResponseEntity<RegisteredBusResponseDTO> getRegisteredBus(@PathVariable Long id) {
+        try {
+            RegisteredBusResponseDTO response = registeredBusService.getRegisteredBusById(id);
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.notFound().build();
+        } catch (Exception e) {
+            logger.error("Failed to get registered bus {}: {}", id, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
+        }
+    }
+
+    @GetMapping("/registered-buses/company/{companyId}")
+    @Operation(summary = "Get registered buses by company", description = "Retrieves all registered buses for a specific company")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Registered buses retrieved successfully"),
+        @ApiResponse(responseCode = "404", description = "Company not found")
+    })
+    public ResponseEntity<List<RegisteredBusResponseDTO>> getRegisteredBusesByCompany(@PathVariable Long companyId) {
+        try {
+            List<RegisteredBusResponseDTO> response = registeredBusService.getRegisteredBusesByCompany(companyId);
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.notFound().build();
+        } catch (Exception e) {
+            logger.error("Failed to get registered buses for company {}: {}", companyId, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
+        }
+    }
+
+    @GetMapping("/registered-buses")
+    @Operation(summary = "Get all registered buses", description = "Retrieves all registered buses")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Registered buses retrieved successfully")
+    })
+    public ResponseEntity<List<RegisteredBusResponseDTO>> getAllRegisteredBuses() {
+        try {
+            List<RegisteredBusResponseDTO> response = registeredBusService.getAllRegisteredBuses();
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            logger.error("Failed to get all registered buses: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
         }
     }
 }
