@@ -6,6 +6,7 @@ import com.backend.onebus.dto.RegisterRequestDTO;
 import com.backend.onebus.model.User;
 import com.backend.onebus.model.UserRole;
 import com.backend.onebus.repository.UserRepository;
+import io.jsonwebtoken.JwtException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -48,6 +49,28 @@ public class AuthService {
 
         String token = jwtTokenService.generateToken(user);
         return new AuthResponseDTO(token, jwtTokenService.getExpiryInstant(), user.getEmail(), user.getFullName(), user.getRole());
+    }
+
+    /**
+     * Extract user information from JWT token
+     * Used for token verification endpoints (/api/auth/me, /api/auth/refresh)
+     */
+    public User getUserFromToken(String token) {
+        try {
+            // Check if token is expired
+            if (jwtTokenService.isTokenExpired(token)) {
+                throw new IllegalArgumentException("Token has expired");
+            }
+
+            // Extract email from token
+            String email = jwtTokenService.getEmailFromToken(token);
+
+            // Fetch user from database
+            return userRepository.findByEmail(email)
+                    .orElseThrow(() -> new IllegalArgumentException("User not found"));
+        } catch (JwtException ex) {
+            throw new IllegalArgumentException("Invalid token: " + ex.getMessage());
+        }
     }
 
     private AuthResponseDTO registerWithRole(RegisterRequestDTO request, UserRole role) {

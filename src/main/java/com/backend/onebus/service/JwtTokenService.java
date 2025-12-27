@@ -2,6 +2,8 @@ package com.backend.onebus.service;
 
 import com.backend.onebus.model.User;
 import com.backend.onebus.model.UserRole;
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
@@ -41,6 +43,51 @@ public class JwtTokenService {
                 .setExpiration(Date.from(expiry))
                 .signWith(secretKey, SignatureAlgorithm.HS256)
                 .compact();
+    }
+
+    /**
+     * Parse JWT token and extract claims
+     * @throws JwtException if token is invalid or expired
+     */
+    public Claims parseToken(String token) {
+        return Jwts.parserBuilder()
+                .setSigningKey(secretKey)
+                .build()
+                .parseClaimsJws(token)
+                .getBody();
+    }
+
+    /**
+     * Validate if token is expired
+     */
+    public boolean isTokenExpired(String token) {
+        try {
+            Claims claims = parseToken(token);
+            return claims.getExpiration().before(new Date());
+        } catch (JwtException e) {
+            return true;
+        }
+    }
+
+    /**
+     * Extract email (subject) from token
+     */
+    public String getEmailFromToken(String token) {
+        return parseToken(token).getSubject();
+    }
+
+    /**
+     * Extract role from token
+     */
+    public String getRoleFromToken(String token) {
+        return parseToken(token).get("role", String.class);
+    }
+
+    /**
+     * Extract name from token
+     */
+    public String getNameFromToken(String token) {
+        return parseToken(token).get("name", String.class);
     }
 
     public Instant getExpiryInstant() {
