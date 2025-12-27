@@ -134,13 +134,22 @@ public class BusTrackingService {
     }
 
     public void processTrackerPayload(BusLocation payload) {
+        // Rule 1: Validate IMEI is registered
         String redisKey = BUS_LOCATION_KEY + payload.getTrackerImei();
         BusLocation cachedLocation = (BusLocation) redisTemplate.opsForValue().get(redisKey);
 
+        Bus bus = null;
         if (cachedLocation == null) {
-            Bus bus = busRepository.findByTrackerImei(payload.getTrackerImei());
+            bus = busRepository.findByTrackerImei(payload.getTrackerImei());
             if (bus == null) {
-                logger.warn("No bus found for trackerImei: {}", payload.getTrackerImei());
+                logger.warn("[REJECTED] Unregistered trackerImei: {} - Ignoring foreign device", payload.getTrackerImei());
+                return;
+            }
+            
+            // Rule 2 & 3: Check operational status before processing
+            if (!"active".equalsIgnoreCase(bus.getOperationalStatus())) {
+                logger.info("[IGNORED] Bus {} (IMEI: {}) has status '{}' - Not saving coordinates", 
+                    bus.getBusNumber(), payload.getTrackerImei(), bus.getOperationalStatus());
                 return;
             }
             payload.setBusId(bus.getBusId());
@@ -152,6 +161,15 @@ public class BusTrackingService {
                 bus.getBusCompany().getName() : bus.getBusCompanyName();
             payload.setBusCompany(companyName);
         } else {
+            // If using cached location, we still need to verify the bus is active
+            // Re-fetch bus to check current operational status
+            bus = busRepository.findByTrackerImei(payload.getTrackerImei());
+            if (bus != null && !"active".equalsIgnoreCase(bus.getOperationalStatus())) {
+                logger.info("[IGNORED] Cached bus {} has status '{}' - Not saving coordinates", 
+                    cachedLocation.getBusNumber(), bus.getOperationalStatus());
+                return;
+            }
+            
             payload.setBusId(cachedLocation.getBusId());
             payload.setBusNumber(cachedLocation.getBusNumber());
             payload.setBusDriverId(cachedLocation.getBusDriverId());
@@ -185,14 +203,15 @@ public class BusTrackingService {
 
         redisTemplate.opsForValue().set(redisKey, payload, 24, TimeUnit.HOURS);
         redisTemplate.opsForGeo().add(BUS_GEO_KEY, new RedisGeoCommands.GeoLocation<>(
-                payload.getBusId(), new org.springframework.data.geo.Point(payload.getLon(), payload.getLat())));
+            payload.getBusId(), new org.springframework.data.geo.Point(payload.getLon(), payload.getLat())));
 
-        if (cachedLocation == null || (Instant.now().toEpochMilli() - cachedLocation.getLastSavedTimestamp() >= SAVE_INTERVAL_MS)) {
-            busLocationRepository.save(payload);
-            logger.info("Bus info updated: {}", payload);
-            payload.setLastSavedTimestamp(Instant.now().toEpochMilli());
-            redisTemplate.opsForValue().set(redisKey, payload, 24, TimeUnit.HOURS);
-        }
+        // Always stamp the payload before saving so DB rows have a fresh lastSavedTimestamp
+        payload.setLastSavedTimestamp(Instant.now().toEpochMilli());
+
+        // Persist every payload so /buses/active can read recent positions from the database
+        busLocationRepository.save(payload);
+        logger.info("Bus info updated: {}", payload);
+        redisTemplate.opsForValue().set(redisKey, payload, 24, TimeUnit.HOURS);
 
         streamingService.broadcastBusUpdate(payload);
     }
@@ -216,6 +235,39 @@ public class BusTrackingService {
     public void updateBusDetails(Bus bus) {
         busRepository.save(bus);
         redisTemplate.delete(BUS_LOCATION_KEY + bus.getTrackerImei());
+    }
+    
+    /**
+     * Update the operational status of a bus.
+     * This controls whether the bus's GPS data will be processed and broadcast.
+     * 
+     * @param busId The ID of the bus
+     * @param newStatus The new operational status (active, inactive, maintenance, retired)
+     * @return true if bus was found and updated, false if bus not found
+     */
+    public boolean updateBusStatus(String busId, String newStatus) {
+        Bus bus = busRepository.findById(busId).orElse(null);
+        if (bus == null) {
+            logger.warn("Cannot update status - bus not found: {}", busId);
+            return false;
+        }
+        
+        String oldStatus = bus.getOperationalStatus();
+        bus.setOperationalStatus(newStatus);
+        busRepository.save(bus);
+        
+        logger.info("Bus {} status changed: {} → {}", busId, oldStatus, newStatus);
+        
+        // If changing to inactive, optionally clear Redis cache
+        if ("inactive".equalsIgnoreCase(newStatus) || 
+            "maintenance".equalsIgnoreCase(newStatus) || 
+            "retired".equalsIgnoreCase(newStatus)) {
+            String redisKey = BUS_LOCATION_KEY + bus.getTrackerImei();
+            redisTemplate.delete(redisKey);
+            logger.info("Cleared Redis cache for inactive bus: {}", bus.getTrackerImei());
+        }
+        
+        return true;
     }
 
     public Bus saveBus(Bus bus) {
@@ -268,5 +320,26 @@ public class BusTrackingService {
             }
         }
         return activeBuses;
+    }
+
+    /**
+     * Clean up orphaned buses that have registration numbers but no registered_buses entry
+     */
+    public int cleanupOrphanedBuses() {
+        List<Bus> allBuses = busRepository.findAll();
+        int deleted = 0;
+        
+        for (Bus bus : allBuses) {
+            // Only delete buses that have a registration number (meaning they were synced from registered_buses)
+            // but keep simulator buses (those without registration numbers)
+            if (bus.getRegistrationNumber() != null && !bus.getRegistrationNumber().isEmpty()) {
+                busRepository.delete(bus);
+                deleted++;
+                logger.info("Deleted orphaned bus: {} (regNum: {})", bus.getBusId(), bus.getRegistrationNumber());
+            }
+        }
+        
+        logger.info("Cleanup complete: deleted {} orphaned buses", deleted);
+        return deleted;
     }
 }

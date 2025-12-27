@@ -193,6 +193,21 @@ public class BusCompanyService {
     }
     
     /**
+     * Delete bus company image
+     */
+    public void deleteBusCompanyImage(Long id) {
+        BusCompany company = busCompanyRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Bus company not found with ID: " + id));
+        
+        // Delete the image file if it exists
+        if (company.getImagePath() != null && !company.getImagePath().isEmpty()) {
+            fileStorageService.deleteImage(company.getImagePath());
+            company.setImagePath(null);
+            busCompanyRepository.save(company);
+        }
+    }
+    
+    /**
      * Delete bus company
      */
     public void deleteBusCompany(Long id) {

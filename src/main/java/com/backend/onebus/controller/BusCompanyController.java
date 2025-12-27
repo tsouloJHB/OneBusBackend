@@ -392,6 +392,32 @@ public class BusCompanyController {
         }
     }
     
+    @DeleteMapping("/{id}/image")
+    @Operation(
+        summary = "Delete bus company image",
+        description = "Deletes the image associated with a bus company."
+    )
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Bus company image deleted successfully"),
+        @ApiResponse(responseCode = "404", description = "Bus company not found",
+                content = @Content(mediaType = "application/json")),
+        @ApiResponse(responseCode = "500", description = "Internal server error",
+                content = @Content(mediaType = "application/json"))
+    })
+    public ResponseEntity<?> deleteBusCompanyImage(
+            @Parameter(description = "Bus company ID", required = true)
+            @PathVariable Long id) {
+        try {
+            busCompanyService.deleteBusCompanyImage(id);
+            return ResponseEntity.ok().body(new SuccessResponse("Bus company image deleted successfully"));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ErrorResponse(e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new ErrorResponse("An error occurred while deleting the bus company image"));
+        }
+    }
+
     @DeleteMapping("/{id}")
     @Operation(
         summary = "Delete bus company",

@@ -71,14 +71,16 @@ fallback_southbound_stops = [
 
 API_URL = "http://localhost:8080/api/tracker/payload"
 DELAY_SECONDS = 30  # 30 seconds between stops for realistic simulation
+FAST_DELAY_SECONDS = 15  # 15 seconds for faster bus
 
 # Simulate a bus moving along a path
-def simulate_bus(stops, tracker_imei, direction, bus_number):
+def simulate_bus(stops, tracker_imei, direction, bus_number, delay_seconds=DELAY_SECONDS):
     if not stops:
         print(f"⚠️  No stops available for {direction} direction - skipping simulation")
         return
         
-    print(f"\nStarting Florida Route Bus {tracker_imei} ({direction}) with {len(stops)} stops...")
+    speed_label = "FAST" if delay_seconds == FAST_DELAY_SECONDS else "NORMAL"
+    print(f"\nStarting Florida Route Bus {tracker_imei} ({direction}) [{speed_label}] with {len(stops)} stops...")
     
     current_stop_index = 0
     
@@ -87,6 +89,7 @@ def simulate_bus(stops, tracker_imei, direction, bus_number):
             stop = stops[current_stop_index]
             timestamp = datetime.now().isoformat()
             
+            # Ensure tripDirection uses the expected capitalized format (e.g. "Northbound")
             payload = {
                 "trackerImei": tracker_imei,
                 "busNumber": bus_number,
@@ -95,10 +98,10 @@ def simulate_bus(stops, tracker_imei, direction, bus_number):
                 "timestamp": timestamp,
                 "busStopIndex": stop["bus_stop_index"],
                 "busCompany": "Rea Vaya",
-                "tripDirection": direction.lower()
+                "tripDirection": direction  # use original case (e.g. 'Northbound' / 'Southbound')
             }
             
-            print(f"✓ {direction} Bus {bus_number} at stop {current_stop_index + 1}/{len(stops)}: {stop['address']}")
+            print(f"✓ [{speed_label}] {direction} Bus {bus_number} at stop {current_stop_index + 1}/{len(stops)}: {stop['address']}")
             
             try:
                 resp = requests.post(API_URL, json=payload, headers={"Content-Type": "application/json"})
@@ -111,7 +114,7 @@ def simulate_bus(stops, tracker_imei, direction, bus_number):
             current_stop_index = (current_stop_index + 1) % len(stops)
             
             # Wait before next position update
-            time.sleep(DELAY_SECONDS)
+            time.sleep(delay_seconds)
             
         except Exception as e:
             print(f"Error in {direction} bus simulation: {e}")
@@ -132,12 +135,16 @@ if __name__ == "__main__":
     
     print(f"📍 Loaded {len(northbound_stops)} Northbound stops, {len(southbound_stops)} Southbound stops")
     
-    # Simulate northbound and southbound buses in parallel
+    # Simulate two buses on the same route with different speeds
     import threading
-    t1 = threading.Thread(target=simulate_bus, args=(northbound_stops, "C5NORTH001", "Northbound", "C5"))
-    t2 = threading.Thread(target=simulate_bus, args=(southbound_stops, "C5SOUTH001", "Southbound", "C5"))
+    # Bus 1 (C5-A) - Normal speed on Northbound route
+    t1 = threading.Thread(target=simulate_bus, args=(southbound_stops, "123456789012345", "Northbound", "C5-A", DELAY_SECONDS))
+    # Bus 2 (C5-B) - Fast speed on Northbound route (same route, faster bus)
+    t2 = threading.Thread(target=simulate_bus, args=(southbound_stops, "Rea1234567891", "Northbound", "C5-B", FAST_DELAY_SECONDS))
     
-    print("🚀 Starting parallel bus simulations...")
+    print("🚀 Starting parallel bus simulations on the same route...")
+    print(f"   C5-A: Normal speed ({DELAY_SECONDS}s between stops)")
+    print(f"   C5-B: Fast speed ({FAST_DELAY_SECONDS}s between stops)")
     t1.start()
     t2.start()
     

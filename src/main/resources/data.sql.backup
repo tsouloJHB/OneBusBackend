@@ -1,0 +1,31 @@
+-- Create registered_buses table with correct schema
+CREATE TABLE IF NOT EXISTS registered_buses (
+    id BIGSERIAL PRIMARY KEY,
+    company_id BIGINT NOT NULL REFERENCES bus_companies(id),
+    registration_number VARCHAR(50) NOT NULL UNIQUE,
+    bus_number VARCHAR(20),
+    bus_id VARCHAR(50),
+    tracker_imei VARCHAR(20) NOT NULL,
+    driver_id VARCHAR(50),
+    driver_name VARCHAR(100),
+    model VARCHAR(50) NOT NULL,
+    year INTEGER NOT NULL CHECK (year >= 1900 AND year <= 2100),
+    capacity INTEGER NOT NULL CHECK (capacity >= 1 AND capacity <= 200),
+    status VARCHAR(20) NOT NULL CHECK (status IN ('ACTIVE', 'INACTIVE', 'MAINTENANCE', 'RETIRED')),
+    route_id BIGINT,
+    route_name VARCHAR(100),
+    route_assigned_at TIMESTAMP,
+    last_inspection TIMESTAMP,
+    next_inspection TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create index for performance
+CREATE INDEX IF NOT EXISTS idx_registered_buses_company_id ON registered_buses(company_id);
+CREATE INDEX IF NOT EXISTS idx_registered_buses_registration_number ON registered_buses(registration_number);
+
+-- Insert test bus data
+INSERT INTO buses (bus_id, tracker_imei, bus_number, route, bus_company_name, driver_id, driver_name)
+VALUES ('BUS001', '359339072173799', 'A123', 'Route 1', 'Test Bus Company', 'DRIVER001', 'John Doe')
+ON CONFLICT (bus_id) DO NOTHING; 

@@ -1,0 +1,53 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Build outputs
+/target/
+/build/
+/out/
+
+# Java
+*.class
+
+# Logs
+*.log
+spring-boot.log
+onebus-run.log
+/logs/
+
+# Environment and secrets
+.env
+*.env
+*.local
+*.env.local
+
+# IDE/editor
+.idea/
+*.iml
+*.ipr
+*.iws
+.project
+.classpath
+.settings/
+.factorypath
+.vscode/
+.nb-configuration.xml
+
+# Python virtual environments
+/venv/
+/sim_venv/
+
+# Node modules (if any scripts pull dependencies)
+/node_modules/
+
+# Coverage and test artifacts
+coverage/
+*.lcov
+
+# Patch/backup files
+*.orig
+*.rej
+
+# JVM crash logs
+hs_err_pid*

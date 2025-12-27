@@ -5,11 +5,13 @@ import com.backend.onebus.dto.RouteStopUpdateDTO;
 import com.backend.onebus.dto.RouteCreateDTO;
 import com.backend.onebus.dto.RegisteredBusCreateDTO;
 import com.backend.onebus.dto.RegisteredBusResponseDTO;
+import com.backend.onebus.dto.ActiveBusDTO;
 import com.backend.onebus.model.Bus;
 import com.backend.onebus.model.BusLocation;
 import com.backend.onebus.model.Route;
 import com.backend.onebus.model.RouteStop;
 import com.backend.onebus.repository.BusRepository;
+import com.backend.onebus.repository.BusLocationRepository;
 import com.backend.onebus.repository.RouteRepository;
 import com.backend.onebus.repository.RouteStopRepository;
 import com.backend.onebus.service.BusTrackingService;
@@ -22,6 +24,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.Arrays;
+import java.util.Map;
+
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -34,6 +40,8 @@ import jakarta.transaction.Transactional;
 import java.util.Optional;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -50,6 +58,8 @@ public class BusTrackingController {
     private RouteRepository routeRepository;
     @Autowired
     private RouteStopRepository routeStopRepository;
+    @Autowired
+    private BusLocationRepository busLocationRepository;
     @Autowired
     private ObjectMapper objectMapper;
     @Autowired
@@ -112,6 +122,46 @@ public class BusTrackingController {
         return ResponseEntity.ok().build();
     }
 
+    @PutMapping("/buses/{busId}/status")
+    @Operation(summary = "Update bus operational status", 
+               description = "Update the operational status of a bus. Only buses with 'active' status will have their GPS data processed and broadcast.")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Bus status updated successfully"),
+        @ApiResponse(responseCode = "400", description = "Invalid status value"),
+        @ApiResponse(responseCode = "404", description = "Bus not found")
+    })
+    public ResponseEntity<?> updateBusStatus(
+            @Parameter(description = "ID of the bus", required = true)
+            @PathVariable String busId,
+            @Parameter(description = "New operational status", required = true)
+            @RequestBody Map<String, String> statusUpdate) {
+        
+        String newStatus = statusUpdate.get("operationalStatus");
+        if (newStatus == null || newStatus.trim().isEmpty()) {
+            return ResponseEntity.badRequest()
+                .body(Map.of("error", "operationalStatus is required"));
+        }
+        
+        // Validate status value
+        if (!Arrays.asList("active", "inactive", "maintenance", "retired").contains(newStatus.toLowerCase())) {
+            return ResponseEntity.badRequest()
+                .body(Map.of("error", "Invalid status. Must be one of: active, inactive, maintenance, retired"));
+        }
+        
+        boolean updated = trackingService.updateBusStatus(busId, newStatus);
+        if (updated) {
+            logger.info("Bus {} operational status updated to: {}", busId, newStatus);
+            return ResponseEntity.ok(Map.of(
+                "success", true,
+                "message", "Bus operational status updated to '" + newStatus + "'",
+                "busId", busId,
+                "newStatus", newStatus
+            ));
+        } else {
+            return ResponseEntity.notFound().build();
+        }
+    }
+
     @GetMapping("/buses/{busNumber}/location")
     @Operation(summary = "Get bus location", description = "Get the current location of a specific bus")
     @ApiResponses(value = {
@@ -129,11 +179,149 @@ public class BusTrackingController {
     }
 
     @GetMapping("/buses/active")
-    @Operation(summary = "Get active buses", description = "Retrieve a list of all currently active bus identifiers")
-    @ApiResponse(responseCode = "200", description = "List of active buses retrieved successfully")
-    public ResponseEntity<Set<String>> getActiveBuses() {
-        Set<String> activeBuses = trackingService.getActiveBuses();
-        return ResponseEntity.ok(activeBuses);
+    @Operation(summary = "Get active buses", description = "Retrieves buses with recent location updates and details")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Active buses retrieved successfully"),
+        @ApiResponse(responseCode = "500", description = "Failed to retrieve active buses")
+    })
+    public ResponseEntity<List<ActiveBusDTO>> getActiveBuses(
+            @RequestParam(required = false) String companyId,
+            @RequestParam(required = false) String busNumber) {
+        try {
+            long timeThresholdMillis = System.currentTimeMillis() - (10 * 60 * 1000); // 10 minutes
+
+                List<BusLocation> activeLocations = (companyId != null && !companyId.isEmpty())
+                    ? busLocationRepository.findActiveBusesByCompany(companyId, timeThresholdMillis)
+                    : busLocationRepository.findActiveBuses(timeThresholdMillis);
+
+                if (busNumber != null && !busNumber.isEmpty()) {
+                activeLocations = activeLocations.stream()
+                    .filter(loc -> busNumber.equalsIgnoreCase(loc.getBusNumber()))
+                    .toList();
+                }
+
+            List<ActiveBusDTO> response = new ArrayList<>();
+
+            for (BusLocation location : activeLocations) {
+                // Look up bus for richer metadata
+                Bus busEntity = busRepository.findByTrackerImei(location.getTrackerImei());
+
+                // Look up route (best effort)
+                Route routeEntity = routeRepository
+                        .findByCompanyAndBusNumber(location.getBusCompany(), location.getBusNumber())
+                        .orElse(null);
+
+                ActiveBusDTO.BusInfo busInfo = new ActiveBusDTO.BusInfo(
+                        location.getBusId(),
+                        location.getBusNumber(),
+                        location.getTrackerImei(),
+                        location.getBusDriverId(),
+                        location.getBusDriver()
+                );
+
+                ActiveBusDTO.RouteInfo routeInfo = null;
+                if (routeEntity != null) {
+                    routeInfo = new ActiveBusDTO.RouteInfo(
+                            routeEntity.getId(),
+                            routeEntity.getRouteName(),
+                            routeEntity.getCompany(),
+                            routeEntity.getBusNumber(),
+                            routeEntity.getDescription(),
+                            routeEntity.getDirection(),
+                            routeEntity.getStartPoint(),
+                            routeEntity.getEndPoint(),
+                            routeEntity.isActive()
+                    );
+                }
+
+                ActiveBusDTO.LocationInfo locationInfo = new ActiveBusDTO.LocationInfo(
+                        location.getLat(),
+                        location.getLon()
+                );
+
+                // Look up current and last stop information
+                ActiveBusDTO.StopInfo nextStopInfo = null;
+                ActiveBusDTO.StopInfo lastStopInfo = null;
+                
+                if (routeEntity != null && location.getBusStopIndex() != null) {
+                    // Get all stops for this route in the given direction
+                    List<RouteStop> routeStops = routeStopRepository
+                            .findByRouteIdAndDirectionOrderByBusStopIndex(routeEntity.getId(), location.getTripDirection());
+                    
+                    if (!routeStops.isEmpty()) {
+                        int currentIndex = location.getBusStopIndex();
+                        
+                        // Find current/next stop
+                        for (RouteStop stop : routeStops) {
+                            if (stop.getBusStopIndex() != null && stop.getBusStopIndex() == currentIndex) {
+                                nextStopInfo = new ActiveBusDTO.StopInfo(
+                                        String.valueOf(stop.getId()),
+                                        stop.getAddress(),
+                                        stop.getLatitude(),
+                                        stop.getLongitude(),
+                                        stop.getBusStopIndex()
+                                );
+                                break;
+                            }
+                        }
+                        
+                        // Find last stop (one before current)
+                        if (currentIndex > 0) {
+                            for (RouteStop stop : routeStops) {
+                                if (stop.getBusStopIndex() != null && stop.getBusStopIndex() == (currentIndex - 1)) {
+                                    lastStopInfo = new ActiveBusDTO.StopInfo(
+                                            String.valueOf(stop.getId()),
+                                            stop.getAddress(),
+                                            stop.getLatitude(),
+                                            stop.getLongitude(),
+                                            stop.getBusStopIndex()
+                                    );
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Fallback if no route lookup
+                if (nextStopInfo == null && location.getBusStopIndex() != null) {
+                    nextStopInfo = new ActiveBusDTO.StopInfo(
+                            null,
+                            "Stop " + location.getBusStopIndex(),
+                            null,
+                            null,
+                            location.getBusStopIndex()
+                    );
+                }
+
+                String status = location.getSpeedKmh() < 1.0 ? "at_stop" : "on_route";
+
+                ActiveBusDTO dto = new ActiveBusDTO(
+                        String.valueOf(location.getId()),
+                        busInfo,
+                        routeInfo,
+                        locationInfo,
+                        nextStopInfo,
+                        lastStopInfo,
+                        status,
+                        null, // estimatedArrival not computed
+                        null, // passengerCount not tracked
+                        location.getLastSavedTimestamp(),
+                        location.getSpeedKmh(),
+                        location.getHeadingDegrees(),
+                        location.getHeadingCardinal(),
+                        location.getBusCompany(),
+                        location.getTripDirection()
+                );
+
+                response.add(dto);
+            }
+
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            logger.error("Failed to retrieve active buses: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
+        }
     }
 
     @GetMapping("/buses")
@@ -1152,4 +1340,5 @@ public class BusTrackingController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
         }
     }
+
 }

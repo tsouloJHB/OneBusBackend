@@ -4,6 +4,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -45,7 +47,7 @@ public class FileStorageService {
         }
         String filename = UUID.randomUUID().toString() + extension;
         
-        // Store file
+        // Store file as-is
         Path filePath = uploadPath.resolve(filename);
         Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
         
@@ -87,12 +89,12 @@ public class FileStorageService {
             return false;
         }
         
-        // Check if it's an image type
-        return contentType.equals("image/jpeg") || 
-               contentType.equals("image/jpg") || 
-               contentType.equals("image/png") || 
-               contentType.equals("image/gif") || 
-               contentType.equals("image/webp");
+         // Check if it's an image type
+         return contentType.equals("image/jpeg") || 
+             contentType.equals("image/jpg") || 
+             contentType.equals("image/png") || 
+             contentType.equals("image/gif") || 
+             contentType.equals("image/webp");
     }
     
     public long getFileSizeInMB(MultipartFile file) {

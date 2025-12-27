@@ -2,10 +2,14 @@ package com.backend.onebus.service;
 
 import com.backend.onebus.dto.RegisteredBusCreateDTO;
 import com.backend.onebus.dto.RegisteredBusResponseDTO;
+import com.backend.onebus.model.Bus;
 import com.backend.onebus.model.BusCompany;
 import com.backend.onebus.model.RegisteredBus;
 import com.backend.onebus.repository.BusCompanyRepository;
+import com.backend.onebus.repository.BusRepository;
 import com.backend.onebus.repository.RegisteredBusRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,11 +22,16 @@ import java.util.stream.Collectors;
 @Transactional
 public class RegisteredBusService {
 
+    private static final Logger logger = LoggerFactory.getLogger(RegisteredBusService.class);
+
     @Autowired
     private RegisteredBusRepository registeredBusRepository;
 
     @Autowired
     private BusCompanyRepository busCompanyRepository;
+
+    @Autowired
+    private BusRepository busRepository;
 
     /**
      * Create a new registered bus
@@ -145,6 +154,7 @@ public class RegisteredBusService {
     }
 
     /**
+
      * Convert entity to response DTO
      */
     private RegisteredBusResponseDTO convertToResponseDTO(RegisteredBus bus) {
