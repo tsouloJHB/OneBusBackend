@@ -57,6 +57,7 @@ public class BusTrackingService {
     private RouteStopRepository routeStopRepository;
 
     private static final String BUS_LOCATION_KEY = "bus:location:";
+    private static final String ACTIVE_BUS_KEY_PREFIX = "active:bus:";
     private static final String BUS_GEO_KEY = "bus:geo";
     private static final long SAVE_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
 
@@ -341,5 +342,14 @@ public class BusTrackingService {
         
         logger.info("Cleanup complete: deleted {} orphaned buses", deleted);
         return deleted;
+    }
+
+    /**
+     * Get count of active buses from Redis (in-memory cache)
+     * Active buses are those that have sent location updates recently
+     */
+    public long getActiveBusesCount() {
+        Set<String> activeBusIds = redisTemplate.keys(ACTIVE_BUS_KEY_PREFIX + "*");
+        return activeBusIds != null ? activeBusIds.size() : 0;
     }
 }

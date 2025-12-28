@@ -41,4 +41,11 @@ public interface RegisteredBusRepository extends JpaRepository<RegisteredBus, Lo
      * Count registered buses by company
      */
     long countByCompanyId(Long companyId);
+
+    /**
+     * Find buses that have trackerImei but no tracker entity (for migration)
+     * Uses JOIN FETCH to eagerly load company relationship
+     */
+    @Query("SELECT b FROM RegisteredBus b LEFT JOIN FETCH b.company WHERE b.trackerImei IS NOT NULL AND b.tracker IS NULL")
+    List<RegisteredBus> findBusesNeedingTrackerMigration();
 }

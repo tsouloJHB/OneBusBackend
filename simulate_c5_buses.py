@@ -138,9 +138,9 @@ if __name__ == "__main__":
     # Simulate two buses on the same route with different speeds
     import threading
     # Bus 1 (C5-A) - Normal speed on Northbound route
-    t1 = threading.Thread(target=simulate_bus, args=(southbound_stops, "123456789012345", "Northbound", "C5-A", DELAY_SECONDS))
+    t1 = threading.Thread(target=simulate_bus, args=(southbound_stops, "123456789012345", "Southbound", "C5", DELAY_SECONDS))
     # Bus 2 (C5-B) - Fast speed on Northbound route (same route, faster bus)
-    t2 = threading.Thread(target=simulate_bus, args=(southbound_stops, "Rea1234567891", "Northbound", "C5-B", FAST_DELAY_SECONDS))
+    t2 = threading.Thread(target=simulate_bus, args=(southbound_stops, "Rea1234567789", "Southbound", "C5", FAST_DELAY_SECONDS))
     
     print("🚀 Starting parallel bus simulations on the same route...")
     print(f"   C5-A: Normal speed ({DELAY_SECONDS}s between stops)")

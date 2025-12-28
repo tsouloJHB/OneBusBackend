@@ -33,6 +33,9 @@ public class RegisteredBusService {
     @Autowired
     private BusRepository busRepository;
 
+    @Autowired
+    private DashboardStatsService dashboardStatsService;
+
     /**
      * Create a new registered bus
      */
@@ -64,6 +67,9 @@ public class RegisteredBusService {
         registeredBus.setRouteName(createDTO.getRouteName());
 
         RegisteredBus savedBus = registeredBusRepository.save(registeredBus);
+        
+        // Update dashboard stats
+        dashboardStatsService.incrementBuses();
 
         return convertToResponseDTO(savedBus);
     }
@@ -117,6 +123,9 @@ public class RegisteredBusService {
             throw new IllegalArgumentException("Registered bus not found with ID: " + id);
         }
         registeredBusRepository.deleteById(id);
+        
+        // Update dashboard stats
+        dashboardStatsService.decrementBuses();
     }
 
     /**

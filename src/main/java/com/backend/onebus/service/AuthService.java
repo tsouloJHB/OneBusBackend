@@ -18,13 +18,16 @@ public class AuthService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenService jwtTokenService;
+    private final DashboardStatsService dashboardStatsService;
 
     public AuthService(UserRepository userRepository,
                        PasswordEncoder passwordEncoder,
-                       JwtTokenService jwtTokenService) {
+                       JwtTokenService jwtTokenService,
+                       DashboardStatsService dashboardStatsService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtTokenService = jwtTokenService;
+        this.dashboardStatsService = dashboardStatsService;
     }
 
     public AuthResponseDTO registerCustomer(RegisterRequestDTO request) {
@@ -85,6 +88,10 @@ public class AuthService {
         user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
 
         User saved = userRepository.save(user);
+        
+        // Update dashboard stats
+        dashboardStatsService.incrementUsers();
+        
         String token = jwtTokenService.generateToken(saved);
         return new AuthResponseDTO(token, jwtTokenService.getExpiryInstant(), saved.getEmail(), saved.getFullName(), saved.getRole());
     }

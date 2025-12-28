@@ -31,10 +31,15 @@ public class RegisteredBus {
     @Column(name = "bus_id", length = 50)
     private String busId;
 
-    @NotBlank(message = "Tracker IMEI is required")
+    // Legacy IMEI field - kept for backward compatibility
     @Size(min = 10, max = 20, message = "Tracker IMEI must be between 10 and 20 characters")
-    @Column(name = "tracker_imei", nullable = false, length = 20)
+    @Column(name = "tracker_imei", length = 20)
     private String trackerImei;
+
+    // New tracker reference
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "tracker_id")
+    private Tracker tracker;
 
     @Size(max = 50, message = "Driver ID cannot exceed 50 characters")
     @Column(name = "driver_id", length = 50)
@@ -155,6 +160,14 @@ public class RegisteredBus {
 
     public void setTrackerImei(String trackerImei) {
         this.trackerImei = trackerImei;
+    }
+
+    public Tracker getTracker() {
+        return tracker;
+    }
+
+    public void setTracker(Tracker tracker) {
+        this.tracker = tracker;
     }
 
     public String getDriverId() {

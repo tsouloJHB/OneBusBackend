@@ -17,6 +17,7 @@ import com.backend.onebus.repository.RouteStopRepository;
 import com.backend.onebus.service.BusTrackingService;
 import com.backend.onebus.service.BusSelectionService;
 import com.backend.onebus.service.RegisteredBusService;
+import com.backend.onebus.service.DashboardStatsService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.core.io.ClassPathResource;
@@ -66,6 +67,8 @@ public class BusTrackingController {
     private BusSelectionService busSelectionService;
     @Autowired
     private RegisteredBusService registeredBusService;
+    @Autowired
+    private DashboardStatsService dashboardStatsService;
     private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(BusTrackingController.class);
 
     @PostMapping("/tracker/payload")
@@ -475,6 +478,9 @@ public class BusTrackingController {
             // Save the route
             Route savedRoute = routeRepository.save(newRoute);
             logger.info("Route created successfully with ID: {}", savedRoute.getId());
+            
+            // Update dashboard stats
+            dashboardStatsService.incrementRoutes();
             
             // If stops were provided in the creation DTO, process and save them
             List<Map<String, Object>> createdStops = new java.util.ArrayList<>();
