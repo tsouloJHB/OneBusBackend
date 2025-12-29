@@ -15,6 +15,7 @@
 /Users/thabangsoulo/personalspace/OneBusapplications/OneBusBackend/src/main/java/com/backend/onebus/controller/BusTrackingController.java
 /Users/thabangsoulo/personalspace/OneBusapplications/OneBusBackend/src/main/java/com/backend/onebus/controller/DashboardController.java
 /Users/thabangsoulo/personalspace/OneBusapplications/OneBusBackend/src/main/java/com/backend/onebus/controller/DriverController.java
+/Users/thabangsoulo/personalspace/OneBusapplications/OneBusBackend/src/main/java/com/backend/onebus/controller/FullRouteController.java
 /Users/thabangsoulo/personalspace/OneBusapplications/OneBusBackend/src/main/java/com/backend/onebus/controller/GlobalExceptionHandler.java
 /Users/thabangsoulo/personalspace/OneBusapplications/OneBusBackend/src/main/java/com/backend/onebus/controller/TrackerController.java
 /Users/thabangsoulo/personalspace/OneBusapplications/OneBusBackend/src/main/java/com/backend/onebus/dto/ActiveBusDTO.java
@@ -41,6 +42,7 @@
 /Users/thabangsoulo/personalspace/OneBusapplications/OneBusBackend/src/main/java/com/backend/onebus/model/BusStop.java
 /Users/thabangsoulo/personalspace/OneBusapplications/OneBusBackend/src/main/java/com/backend/onebus/model/DashboardStats.java
 /Users/thabangsoulo/personalspace/OneBusapplications/OneBusBackend/src/main/java/com/backend/onebus/model/Driver.java
+/Users/thabangsoulo/personalspace/OneBusapplications/OneBusBackend/src/main/java/com/backend/onebus/model/FullRoute.java
 /Users/thabangsoulo/personalspace/OneBusapplications/OneBusBackend/src/main/java/com/backend/onebus/model/RegisteredBus.java
 /Users/thabangsoulo/personalspace/OneBusapplications/OneBusBackend/src/main/java/com/backend/onebus/model/Route.java
 /Users/thabangsoulo/personalspace/OneBusapplications/OneBusBackend/src/main/java/com/backend/onebus/model/RouteStop.java
@@ -53,6 +55,7 @@
 /Users/thabangsoulo/personalspace/OneBusapplications/OneBusBackend/src/main/java/com/backend/onebus/repository/BusRepository.java
 /Users/thabangsoulo/personalspace/OneBusapplications/OneBusBackend/src/main/java/com/backend/onebus/repository/DashboardStatsRepository.java
 /Users/thabangsoulo/personalspace/OneBusapplications/OneBusBackend/src/main/java/com/backend/onebus/repository/DriverRepository.java
+/Users/thabangsoulo/personalspace/OneBusapplications/OneBusBackend/src/main/java/com/backend/onebus/repository/FullRouteRepository.java
 /Users/thabangsoulo/personalspace/OneBusapplications/OneBusBackend/src/main/java/com/backend/onebus/repository/RegisteredBusRepository.java
 /Users/thabangsoulo/personalspace/OneBusapplications/OneBusBackend/src/main/java/com/backend/onebus/repository/RouteRepository.java
 /Users/thabangsoulo/personalspace/OneBusapplications/OneBusBackend/src/main/java/com/backend/onebus/repository/RouteStopRepository.java

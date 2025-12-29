@@ -10,10 +10,12 @@ import com.backend.onebus.model.Bus;
 import com.backend.onebus.model.BusLocation;
 import com.backend.onebus.model.Route;
 import com.backend.onebus.model.RouteStop;
+import com.backend.onebus.model.FullRoute;
 import com.backend.onebus.repository.BusRepository;
 import com.backend.onebus.repository.BusLocationRepository;
 import com.backend.onebus.repository.RouteRepository;
 import com.backend.onebus.repository.RouteStopRepository;
+import com.backend.onebus.repository.FullRouteRepository;
 import com.backend.onebus.service.BusTrackingService;
 import com.backend.onebus.service.BusSelectionService;
 import com.backend.onebus.service.RegisteredBusService;
@@ -59,6 +61,8 @@ public class BusTrackingController {
     private RouteRepository routeRepository;
     @Autowired
     private RouteStopRepository routeStopRepository;
+    @Autowired
+    private FullRouteRepository fullRouteRepository;
     @Autowired
     private BusLocationRepository busLocationRepository;
     @Autowired
@@ -1163,6 +1167,50 @@ public class BusTrackingController {
             logger.error("Failed to delete stop {} from route {}: {}", stopId, routeId, e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Map.of("error", "Failed to delete stop: " + e.getMessage()));
+        }
+    }
+
+    @DeleteMapping("/routes/{routeId}")
+    @Transactional
+    @Operation(summary = "Delete a route", description = "Delete route, its stops, and stored full route geometry")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Route deleted successfully"),
+        @ApiResponse(responseCode = "404", description = "Route not found"),
+        @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    public ResponseEntity<?> deleteRoute(
+            @Parameter(description = "ID of the route to delete", required = true)
+            @PathVariable Long routeId) {
+        try {
+            logger.info("Deleting route {} and associated data", routeId);
+            Optional<Route> routeOpt = routeRepository.findById(routeId);
+            if (routeOpt.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(Map.of("error", "Route not found"));
+            }
+
+            List<RouteStop> stops = routeStopRepository.findByRouteIdOrderByBusStopIndex(routeId);
+            if (!stops.isEmpty()) {
+                routeStopRepository.deleteAll(stops);
+            }
+
+            List<FullRoute> fullRoutes = fullRouteRepository.findByRouteId(routeId);
+            if (!fullRoutes.isEmpty()) {
+                fullRouteRepository.deleteAll(fullRoutes);
+            }
+
+            routeRepository.delete(routeOpt.get());
+            logger.info("Deleted route {} with {} stops and {} full route geometries", routeId, stops.size(), fullRoutes.size());
+            return ResponseEntity.ok(Map.of(
+                    "message", "Route deleted successfully",
+                    "deletedRouteId", routeId,
+                    "deletedStops", stops.size(),
+                    "deletedFullRoutes", fullRoutes.size()
+            ));
+        } catch (Exception e) {
+            logger.error("Failed to delete route {}: {}", routeId, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Failed to delete route: " + e.getMessage()));
         }
     }
 
