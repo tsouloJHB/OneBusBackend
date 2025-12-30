@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.Map;
 import java.util.Set;
+import java.util.HashMap;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Service
@@ -206,6 +207,45 @@ public class BusStreamingService {
             } else {
                 logger.debug("No route subscribers found for key: {}", subscriptionKey);
                 logger.debug("Active subscriptions: {}", activeSubscriptions.keySet());
+            }
+        }
+    }
+
+    /**
+     * Broadcast that a bus went offline so clients can drop it immediately.
+     */
+    public void broadcastBusOffline(BusLocation offline) {
+        if (offline == null) return;
+
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("event", "bus-offline");
+        payload.put("busId", offline.getBusId());
+        payload.put("busNumber", offline.getBusNumber());
+        payload.put("direction", offline.getTripDirection());
+
+        // Notify specific bus subscribers
+        if (offline.getBusId() != null) {
+            Set<String> specificSubscribers = specificBusSubscriptions.get(offline.getBusId());
+            if (specificSubscribers != null && !specificSubscribers.isEmpty()) {
+                for (String sessionId : specificSubscribers) {
+                    String destination = "/topic/bus/" + offline.getBusId();
+                    messagingTemplate.convertAndSendToUser(sessionId, destination, payload);
+                }
+            }
+        }
+
+        // Notify route-based subscribers (same channels we use for updates)
+        if (offline.getBusNumber() != null && offline.getTripDirection() != null) {
+            String subscriptionKey = offline.getBusNumber() + "_" + offline.getTripDirection();
+            String canonical = subscriptionKey.toLowerCase();
+            Set<String> originals = canonicalToOriginalKeys.get(canonical);
+            if (originals != null && !originals.isEmpty()) {
+                for (String activeKey : originals) {
+                    Set<String> routeSubscribers = activeSubscriptions.get(activeKey);
+                    if (routeSubscribers != null && !routeSubscribers.isEmpty()) {
+                        messagingTemplate.convertAndSend("/topic/bus/" + activeKey, payload);
+                    }
+                }
             }
         }
     }

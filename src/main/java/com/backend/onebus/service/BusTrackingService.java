@@ -9,6 +9,9 @@ import com.backend.onebus.repository.BusRepository;
 import com.backend.onebus.repository.BusLocationRepository;
 import com.backend.onebus.repository.RouteRepository;
 import com.backend.onebus.repository.RouteStopRepository;
+import com.backend.onebus.service.routing.BusCompanyRoutingStrategy;
+import com.backend.onebus.service.BusSelectionService;
+import com.backend.onebus.service.routing.BusCompanyRoutingStrategy;
 import com.backend.onebus.model.Route;
 import com.backend.onebus.model.RouteStop;
 import org.locationtech.jts.geom.GeometryFactory;
@@ -56,6 +59,11 @@ public class BusTrackingService {
     @Autowired
     private RouteStopRepository routeStopRepository;
 
+    @Autowired
+    private com.backend.onebus.service.routing.BusCompanyStrategyFactory strategyFactory;
+
+    @Autowired
+    private BusSelectionService busSelectionService;
     private static final String BUS_LOCATION_KEY = "bus:location:";
     private static final String ACTIVE_BUS_KEY_PREFIX = "active:bus:";
     private static final String BUS_GEO_KEY = "bus:geo";
@@ -182,21 +190,70 @@ public class BusTrackingService {
         String company = payload.getBusCompany();
         String busNumber = payload.getBusNumber();
         if (company != null && busNumber != null) {
-            BusStop nearbyStop = findNearbyStop(company, busNumber, payload.getLat(), payload.getLon());
-            if (nearbyStop != null) {
-                // Only update direction if not bidirectional
-                if (!"bidirectional".equalsIgnoreCase(nearbyStop.getDirection())) {
-                    payload.setTripDirection(nearbyStop.getDirection());
+            try {
+                // Apply company-specific routing strategy
+                com.backend.onebus.service.routing.BusCompanyRoutingStrategy strategy = 
+                    strategyFactory.getStrategy(company);
+                
+                // Get the route for this bus
+                Route route = routeRepository.findByCompanyAndBusNumber(company, busNumber).orElse(null);
+                
+                // Retrieve previous location from Redis to use as historical context
+                BusLocation previousLocation = cachedLocation;
+                
+                // Step 1: Apply global rules (first GPS, end-of-route)
+                String globalDirection = strategy.applyGlobalRules(payload, previousLocation, route);
+                if (globalDirection != null) {
+                    payload.setTripDirection(globalDirection);
+                    logger.info("[Strategy] Global rule applied: Bus {} direction set to {}", 
+                        busNumber, globalDirection);
                 }
-                // For bidirectional, use the correct index if available
-                if ("bidirectional".equalsIgnoreCase(nearbyStop.getDirection())) {
-                    if (payload.getTripDirection() != null && payload.getTripDirection().equalsIgnoreCase("Northbound") && nearbyStop.getNorthboundIndex() != null) {
-                        payload.setBusStopIndex(nearbyStop.getNorthboundIndex());
-                    } else if (payload.getTripDirection() != null && payload.getTripDirection().equalsIgnoreCase("Southbound") && nearbyStop.getSouthboundIndex() != null) {
-                        payload.setBusStopIndex(nearbyStop.getSouthboundIndex());
+                
+                // Step 2: Apply company-specific direction inference
+                String inferredDirection = strategy.inferDirection(payload, previousLocation, route);
+                if (inferredDirection != null) {
+                    payload.setTripDirection(inferredDirection);
+                    logger.info("[Strategy] Company inference applied: Bus {} direction set to {}", 
+                        busNumber, inferredDirection);
+                }
+                
+                // Step 3: Update busStopIndex based on proximity to stops
+                BusStop nearbyStop = findNearbyStop(company, busNumber, payload.getLat(), payload.getLon());
+                if (nearbyStop != null) {
+                    // Only update direction if not bidirectional
+                    if (!"bidirectional".equalsIgnoreCase(nearbyStop.getDirection())) {
+                        payload.setTripDirection(nearbyStop.getDirection());
                     }
-                } else {
-                    payload.setBusStopIndex(nearbyStop.getBusStopIndex());
+                    // For bidirectional, use the correct index if available
+                    if ("bidirectional".equalsIgnoreCase(nearbyStop.getDirection())) {
+                        if (payload.getTripDirection() != null && payload.getTripDirection().equalsIgnoreCase("Northbound") && nearbyStop.getNorthboundIndex() != null) {
+                            payload.setBusStopIndex(nearbyStop.getNorthboundIndex());
+                        } else if (payload.getTripDirection() != null && payload.getTripDirection().equalsIgnoreCase("Southbound") && nearbyStop.getSouthboundIndex() != null) {
+                            payload.setBusStopIndex(nearbyStop.getSouthboundIndex());
+                        }
+                    } else {
+                        payload.setBusStopIndex(nearbyStop.getBusStopIndex());
+                    }
+                }
+                
+            } catch (Exception e) {
+                logger.error("[Strategy] Error applying routing strategy for bus {}: {}", 
+                    busNumber, e.getMessage(), e);
+                // Continue with existing logic if strategy fails
+                BusStop nearbyStop = findNearbyStop(company, busNumber, payload.getLat(), payload.getLon());
+                if (nearbyStop != null) {
+                    if (!"bidirectional".equalsIgnoreCase(nearbyStop.getDirection())) {
+                        payload.setTripDirection(nearbyStop.getDirection());
+                    }
+                    if ("bidirectional".equalsIgnoreCase(nearbyStop.getDirection())) {
+                        if (payload.getTripDirection() != null && payload.getTripDirection().equalsIgnoreCase("Northbound") && nearbyStop.getNorthboundIndex() != null) {
+                            payload.setBusStopIndex(nearbyStop.getNorthboundIndex());
+                        } else if (payload.getTripDirection() != null && payload.getTripDirection().equalsIgnoreCase("Southbound") && nearbyStop.getSouthboundIndex() != null) {
+                            payload.setBusStopIndex(nearbyStop.getSouthboundIndex());
+                        }
+                    } else {
+                        payload.setBusStopIndex(nearbyStop.getBusStopIndex());
+                    }
                 }
             }
         }
@@ -233,6 +290,48 @@ public class BusTrackingService {
         return null;
     }
 
+    /**
+     * Find a replacement bus using existing selection rules.
+     * Treat the offline bus's last known position/index as the "client" position.
+     */
+    private BusLocation findReplacementBus(BusLocation offline) {
+        if (offline == null || offline.getBusNumber() == null || offline.getTripDirection() == null) return null;
+
+        int clientIndex = offline.getBusStopIndex() != null ? offline.getBusStopIndex() : 0;
+        String replacementBusId = busSelectionService.selectBestBusForClient(
+                offline.getBusNumber(),
+                offline.getTripDirection(),
+                offline.getLat(),
+                offline.getLon(),
+                clientIndex
+        );
+
+        if (replacementBusId == null || replacementBusId.equals(offline.getBusId())) {
+            return null;
+        }
+
+        return getBusLocationById(replacementBusId);
+    }
+
+    /**
+     * Locate a bus in Redis by its busId (keys are stored by tracker IMEI).
+     */
+    private BusLocation getBusLocationById(String busId) {
+        try {
+            Set<String> keys = redisTemplate.keys(BUS_LOCATION_KEY + "*");
+            if (keys == null) return null;
+            for (String key : keys) {
+                BusLocation loc = (BusLocation) redisTemplate.opsForValue().get(key);
+                if (loc != null && busId.equals(loc.getBusId())) {
+                    return loc;
+                }
+            }
+        } catch (Exception e) {
+            logger.error("Error finding bus location by id {}: {}", busId, e.getMessage());
+        }
+        return null;
+    }
+
     public void updateBusDetails(Bus bus) {
         busRepository.save(bus);
         redisTemplate.delete(BUS_LOCATION_KEY + bus.getTrackerImei());
@@ -259,13 +358,30 @@ public class BusTrackingService {
         
         logger.info("Bus {} status changed: {} → {}", busId, oldStatus, newStatus);
         
-        // If changing to inactive, optionally clear Redis cache
+        // If changing to inactive, clear cache, broadcast offline, and optionally swap in a replacement bus
         if ("inactive".equalsIgnoreCase(newStatus) || 
             "maintenance".equalsIgnoreCase(newStatus) || 
             "retired".equalsIgnoreCase(newStatus)) {
             String redisKey = BUS_LOCATION_KEY + bus.getTrackerImei();
+            BusLocation offlineLocation = (BusLocation) redisTemplate.opsForValue().get(redisKey);
+
             redisTemplate.delete(redisKey);
             logger.info("Cleared Redis cache for inactive bus: {}", bus.getTrackerImei());
+
+            if (offlineLocation != null) {
+                // Let clients drop the inactive bus immediately
+                streamingService.broadcastBusOffline(offlineLocation);
+
+                // Find a replacement bus using existing selection rules
+                BusLocation replacement = findReplacementBus(offlineLocation);
+                if (replacement != null) {
+                    logger.info("Broadcasting replacement bus {} for offline bus {}", replacement.getBusId(), offlineLocation.getBusId());
+                    streamingService.broadcastBusUpdate(replacement);
+                } else {
+                    logger.info("No replacement bus available for offline bus {} on route {} {}", 
+                            offlineLocation.getBusId(), offlineLocation.getBusNumber(), offlineLocation.getTripDirection());
+                }
+            }
         }
         
         return true;

@@ -73,3 +73,8 @@
 /Users/thabangsoulo/personalspace/OneBusapplications/OneBusBackend/src/main/java/com/backend/onebus/service/JwtTokenService.java
 /Users/thabangsoulo/personalspace/OneBusapplications/OneBusBackend/src/main/java/com/backend/onebus/service/RegisteredBusService.java
 /Users/thabangsoulo/personalspace/OneBusapplications/OneBusBackend/src/main/java/com/backend/onebus/service/TrackerService.java
+/Users/thabangsoulo/personalspace/OneBusapplications/OneBusBackend/src/main/java/com/backend/onebus/service/routing/BusCompanyRoutingStrategy.java
+/Users/thabangsoulo/personalspace/OneBusapplications/OneBusBackend/src/main/java/com/backend/onebus/service/routing/BusCompanyStrategyFactory.java
+/Users/thabangsoulo/personalspace/OneBusapplications/OneBusBackend/src/main/java/com/backend/onebus/service/routing/DefaultRoutingStrategy.java
+/Users/thabangsoulo/personalspace/OneBusapplications/OneBusBackend/src/main/java/com/backend/onebus/service/routing/MetroBusRoutingStrategy.java
+/Users/thabangsoulo/personalspace/OneBusapplications/OneBusBackend/src/main/java/com/backend/onebus/service/routing/ReaVayaRoutingStrategy.java
