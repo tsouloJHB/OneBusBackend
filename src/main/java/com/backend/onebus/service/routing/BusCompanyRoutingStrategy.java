@@ -41,9 +41,12 @@ public abstract class BusCompanyRoutingStrategy {
      * @param route The route the bus is operating on
      * @return The direction after applying global rules, or null if no rule applies
      */
-    public String applyGlobalRules(BusLocation current, BusLocation previous, Route route) {
+    public String applyGlobalRules(BusLocation current, BusLocation previous, Route route, Long companyId, com.backend.onebus.service.RuleEngineService ruleEngineService) {
         // Global Rule 1: First GPS point - no direction + busStopIndex is 0/null
-        if (previous == null && current.getTripDirection() == null) {
+        boolean allowAutoFlip = ruleEngineService == null || ruleEngineService.isEnabled(companyId, com.backend.onebus.constants.RuleConstants.AUTO_FLIP_AT_TERMINAL, true);
+        boolean allowFirstPointDefault = ruleEngineService == null || ruleEngineService.isEnabled(companyId, com.backend.onebus.constants.RuleConstants.FIRST_GPS_SOUTHBOUND, true);
+
+        if (previous == null && current.getTripDirection() == null && allowFirstPointDefault) {
             if (current.getBusStopIndex() == null || current.getBusStopIndex() == 0) {
                 logger.info("[Global Rule 1] Bus {} first GPS point with no direction and index 0/null - assigning Southbound", 
                     current.getBusNumber());
@@ -52,7 +55,7 @@ public abstract class BusCompanyRoutingStrategy {
         }
         
         // Global Rule 2: Bus reached end of route - switch direction
-        if (current.getTripDirection() != null && current.getBusStopIndex() != null && route != null) {
+        if (allowAutoFlip && current.getTripDirection() != null && current.getBusStopIndex() != null && route != null) {
             int totalStops = getTotalStopsInDirection(route, current.getTripDirection());
             
             if (totalStops > 0 && current.getBusStopIndex() == totalStops) {

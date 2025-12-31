@@ -3,17 +3,16 @@ package com.backend.onebus.service;
 import com.backend.onebus.model.Bus;
 import com.backend.onebus.model.BusLocation;
 import com.backend.onebus.model.BusStop;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.backend.onebus.repository.BusRepository;
+import com.backend.onebus.model.Route;
+import com.backend.onebus.model.RouteStop;
 import com.backend.onebus.repository.BusLocationRepository;
+import com.backend.onebus.repository.BusRepository;
 import com.backend.onebus.repository.RouteRepository;
 import com.backend.onebus.repository.RouteStopRepository;
 import com.backend.onebus.service.routing.BusCompanyRoutingStrategy;
-import com.backend.onebus.service.BusSelectionService;
-import com.backend.onebus.service.routing.BusCompanyRoutingStrategy;
-import com.backend.onebus.model.Route;
-import com.backend.onebus.model.RouteStop;
+import com.backend.onebus.service.RuleEngineService;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.locationtech.jts.geom.GeometryFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.ClassPathResource;
@@ -64,6 +63,8 @@ public class BusTrackingService {
 
     @Autowired
     private BusSelectionService busSelectionService;
+    @Autowired
+    private RuleEngineService ruleEngineService;
     private static final String BUS_LOCATION_KEY = "bus:location:";
     private static final String ACTIVE_BUS_KEY_PREFIX = "active:bus:";
     private static final String BUS_GEO_KEY = "bus:geo";
@@ -148,6 +149,7 @@ public class BusTrackingService {
         BusLocation cachedLocation = (BusLocation) redisTemplate.opsForValue().get(redisKey);
 
         Bus bus = null;
+        Long companyId = null;
         if (cachedLocation == null) {
             bus = busRepository.findByTrackerImei(payload.getTrackerImei());
             if (bus == null) {
@@ -168,6 +170,9 @@ public class BusTrackingService {
             // Use the company name or the legacy busCompanyName field
             String companyName = (bus.getBusCompany() != null) ? 
                 bus.getBusCompany().getName() : bus.getBusCompanyName();
+            if (bus.getBusCompany() != null) {
+                companyId = bus.getBusCompany().getId();
+            }
             payload.setBusCompany(companyName);
         } else {
             // If using cached location, we still need to verify the bus is active
@@ -184,6 +189,9 @@ public class BusTrackingService {
             payload.setBusDriverId(cachedLocation.getBusDriverId());
             payload.setBusDriver(cachedLocation.getBusDriver());
             payload.setBusCompany(cachedLocation.getBusCompany());
+            if (bus != null && bus.getBusCompany() != null) {
+                companyId = bus.getBusCompany().getId();
+            }
         }
 
         // --- New logic: update direction and busStopIndex based on proximity to stops ---
@@ -191,6 +199,9 @@ public class BusTrackingService {
         String busNumber = payload.getBusNumber();
         if (company != null && busNumber != null) {
             try {
+                if (companyId == null) {
+                    companyId = ruleEngineService.resolveCompanyIdByName(company).orElse(null);
+                }
                 // Apply company-specific routing strategy
                 com.backend.onebus.service.routing.BusCompanyRoutingStrategy strategy = 
                     strategyFactory.getStrategy(company);
@@ -202,7 +213,7 @@ public class BusTrackingService {
                 BusLocation previousLocation = cachedLocation;
                 
                 // Step 1: Apply global rules (first GPS, end-of-route)
-                String globalDirection = strategy.applyGlobalRules(payload, previousLocation, route);
+                String globalDirection = strategy.applyGlobalRules(payload, previousLocation, route, companyId, ruleEngineService);
                 if (globalDirection != null) {
                     payload.setTripDirection(globalDirection);
                     logger.info("[Strategy] Global rule applied: Bus {} direction set to {}", 
