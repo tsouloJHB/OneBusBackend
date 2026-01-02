@@ -178,6 +178,7 @@ public class BusStreamingService {
     
     /**
      * Broadcast bus location update to all subscribed clients
+     * Implements "Shadow Bus" strategy - sends selected bus data to requested route topics
      */
     public void broadcastBusUpdate(BusLocation location) {
         long startTime = System.currentTimeMillis();
@@ -188,14 +189,43 @@ public class BusStreamingService {
             return;
         }
         
-        // Broadcast to specific bus subscribers
-        Set<String> specificSubscribers = specificBusSubscriptions.get(location.getBusId());
-        if (specificSubscribers != null && !specificSubscribers.isEmpty()) {
-            logger.info("Broadcasting update for specific bus {} to {} subscribers", 
-                        location.getBusId(), specificSubscribers.size());
-            
-            // Broadcast once to the public topic; all subscribed clients will receive
-            messagingTemplate.convertAndSend("/topic/bus/" + location.getBusId(), location);
+        // SHADOW BUS STRATEGY: Check if this bus is selected for any client subscriptions
+        // and send its data to the route topics they subscribed to
+        for (ClientSubscription clientSub : clientSubscriptions.values()) {
+            if (location.getBusId().equals(clientSub.getBusId())) {
+                // This bus is selected for a client - send data to their requested route topic
+                String requestedTopic = "/topic/bus/" + clientSub.getBusNumber() + "_" + clientSub.getDirection();
+                
+                // Create enhanced location data with fallback information
+                Map<String, Object> enhancedLocation = new HashMap<>();
+                enhancedLocation.put("busId", location.getBusId());
+                enhancedLocation.put("busNumber", location.getBusNumber());
+                enhancedLocation.put("lat", location.getLat());
+                enhancedLocation.put("lon", location.getLon());
+                enhancedLocation.put("speedKmh", location.getSpeedKmh());
+                enhancedLocation.put("tripDirection", location.getTripDirection());
+                enhancedLocation.put("timestamp", location.getTimestamp());
+                enhancedLocation.put("busStopIndex", location.getBusStopIndex());
+                
+                // Add fallback information if the selected bus direction differs from requested
+                boolean isFallback = !location.getTripDirection().equalsIgnoreCase(clientSub.getDirection());
+                if (isFallback) {
+                    enhancedLocation.put("isFallback", true);
+                    enhancedLocation.put("requestedDirection", clientSub.getDirection());
+                    enhancedLocation.put("actualDirection", location.getTripDirection());
+                    logger.info("SHADOW BUS: Sending fallback data - client requested {} but selected bus {} is running {}", 
+                               clientSub.getDirection(), location.getBusId(), location.getTripDirection());
+                } else {
+                    enhancedLocation.put("isFallback", false);
+                }
+                
+                logger.info("SHADOW BUS: Broadcasting {} data for bus {} to requested topic {} (session: {})", 
+                           isFallback ? "FALLBACK" : "DIRECT", location.getBusId(), requestedTopic, clientSub.getSessionId());
+                
+                // Send to the requested route topic, not the bus ID topic
+                messagingTemplate.convertAndSend(requestedTopic, enhancedLocation);
+                totalSubscribers++;
+            }
         }
         
         // Also broadcast to route-based subscribers (for backward compatibility)
@@ -215,6 +245,7 @@ public class BusStreamingService {
                         String destination = "/topic/bus/" + activeKey; // send to the stored key so clients receive it
                         logger.debug("Broadcasting to destination: {}", destination);
                         messagingTemplate.convertAndSend(destination, location);
+                        totalSubscribers += routeSubscribers.size();
                     }
                 }
             } else {
