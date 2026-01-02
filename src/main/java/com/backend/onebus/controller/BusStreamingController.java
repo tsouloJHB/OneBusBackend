@@ -73,6 +73,8 @@ public class BusStreamingController {
             
             if (selectedBusId != null) {
                 streamingService.subscribeToSpecificBus(sessionId, selectedBusId);
+                // CRITICAL: Also register for route-based subscription so Shadow Bus strategy works
+                streamingService.subscribeToBus(sessionId, busNumber, direction);
                 streamingService.storeClientSubscription(sessionId, busNumber, direction, 
                                                        clientLat, clientLon, clientBusStopIndex, selectedBusId);
                 
