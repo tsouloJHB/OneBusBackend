@@ -2,11 +2,13 @@ package com.backend.onebus.controller;
 
 import com.backend.onebus.service.BusStreamingService;
 import com.backend.onebus.service.BusSelectionService;
+import com.backend.onebus.service.MetricsService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
+import org.springframework.messaging.handler.annotation.SendTo;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.messaging.simp.annotation.SendToUser;
 import org.springframework.stereotype.Controller;
@@ -28,19 +30,26 @@ public class BusStreamingController {
     @Autowired
     private BusSelectionService busSelectionService;
     
+    @Autowired
+    private MetricsService metricsService;
+    
     /**
      * Handle subscription request from client with location and bus stop index
      */
     @MessageMapping("/subscribe")
-    @SendToUser("/topic/subscription/status")
+    @SendTo("/topic/bus/subscription-status")
     @Hidden
     public Map<String, Object> subscribeToBus(
             @Payload Map<String, Object> subscriptionRequest,
             SimpMessageHeaderAccessor headerAccessor) {
         
         String sessionId = headerAccessor.getSessionId();
-        logger.info("Received subscription request from session {}: {}", sessionId, subscriptionRequest);
-        logger.info("Session ID: {}, Headers: {}", sessionId, headerAccessor.getSessionAttributes());
+        logger.info("========================================");
+        logger.info("SUBSCRIPTION REQUEST RECEIVED");
+        logger.info("Session ID: {}", sessionId);
+        logger.info("Request: {}", subscriptionRequest);
+        logger.info("Headers: {}", headerAccessor.getSessionAttributes());
+        logger.info("========================================");
         
         String busNumber = (String) subscriptionRequest.get("busNumber");
         String direction = (String) subscriptionRequest.get("direction");
@@ -52,7 +61,8 @@ public class BusStreamingController {
             logger.warn("Invalid subscription request from session {}: missing busNumber or direction", sessionId);
             return Map.of(
                 "status", "error",
-                "message", "Missing busNumber or direction"
+                "message", "Missing busNumber or direction",
+                "sessionId", sessionId
             );
         }
         
@@ -65,16 +75,24 @@ public class BusStreamingController {
                 streamingService.subscribeToSpecificBus(sessionId, selectedBusId);
                 streamingService.storeClientSubscription(sessionId, busNumber, direction, 
                                                        clientLat, clientLon, clientBusStopIndex, selectedBusId);
+                
+                // Record smart bus selection metrics
+                metricsService.recordSmartBusSelection(sessionId, direction, selectedBusId, false);
+                
                 logger.info("Smart bus selection for session {}: selected bus {} for route {} {}", 
                            sessionId, selectedBusId, busNumber, direction);
-                return Map.of(
+                
+                Map<String, Object> response = Map.of(
                     "status", "success",
                     "message", "Subscribed to best bus " + selectedBusId + " for route " + busNumber + " " + direction,
                     "busNumber", busNumber,
                     "direction", direction,
                     "selectedBusId", selectedBusId,
-                    "selectionType", "smart"
+                    "selectionType", "smart",
+                    "sessionId", sessionId
                 );
+                logger.info("Sending subscription response to session {}: {}", sessionId, response);
+                return response;
             } else {
                 // Fallback to traditional subscription if no suitable bus found
                 streamingService.subscribeToBus(sessionId, busNumber, direction);
@@ -100,6 +118,25 @@ public class BusStreamingController {
                 "selectionType", "traditional"
             );
         }
+    }
+    
+    /**
+     * Handle manual cleanup request from client (when bus arrives or user stops tracking)
+     */
+    @MessageMapping("/cleanup")
+    @SendToUser("/topic/subscription/status")
+    public Map<String, Object> cleanupSession(SimpMessageHeaderAccessor headerAccessor) {
+        String sessionId = headerAccessor.getSessionId();
+        logger.info("Manual cleanup requested for session {}", sessionId);
+        
+        // Remove all subscriptions for this session
+        streamingService.removeClientSubscriptions(sessionId);
+        
+        return Map.of(
+            "status", "success",
+            "message", "Session cleaned up successfully",
+            "sessionId", sessionId
+        );
     }
     
     /**

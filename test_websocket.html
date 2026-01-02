@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebSocket Test</title>
+</head>
+<body>
+    <h1>WebSocket STOMP Test</h1>
+    <div id="status">Connecting...</div>
+    <div id="messages"></div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/@stomp/stompjs@7.0.0/bundles/stomp.umd.min.js"></script>
+    <script>
+        const statusDiv = document.getElementById('status');
+        const messagesDiv = document.getElementById('messages');
+        
+        function log(message) {
+            console.log(message);
+            messagesDiv.innerHTML += '<div>' + new Date().toLocaleTimeString() + ': ' + message + '</div>';
+        }
+        
+        // Create STOMP client
+        const client = new StompJs.Client({
+            brokerURL: 'ws://localhost:8080/ws/bus-updates',
+            debug: function (str) {
+                log('DEBUG: ' + str);
+            },
+            reconnectDelay: 5000,
+            heartbeatIncoming: 4000,
+            heartbeatOutgoing: 4000,
+        });
+        
+        client.onConnect = function (frame) {
+            statusDiv.textContent = 'Connected!';
+            log('Connected to WebSocket');
+            
+            // Subscribe to bus updates
+            client.subscribe('/topic/bus/C5_Southbound', function (message) {
+                log('Received message: ' + message.body);
+            });
+            
+            // Send subscription request
+            client.publish({
+                destination: '/app/subscribe',
+                body: JSON.stringify({
+                    busNumber: 'C5',
+                    direction: 'Southbound'
+                })
+            });
+            
+            log('Sent subscription request for C5 Southbound');
+        };
+        
+        client.onStompError = function (frame) {
+            statusDiv.textContent = 'Error: ' + frame.headers['message'];
+            log('STOMP Error: ' + frame.headers['message']);
+        };
+        
+        client.onWebSocketError = function (event) {
+            statusDiv.textContent = 'WebSocket Error';
+            log('WebSocket Error: ' + JSON.stringify(event));
+        };
+        
+        // Activate the client
+        client.activate();
+    </script>
+</body>
+</html>

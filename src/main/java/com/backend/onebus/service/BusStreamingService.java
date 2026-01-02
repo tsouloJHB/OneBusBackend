@@ -1,6 +1,7 @@
 package com.backend.onebus.service;
 
 import com.backend.onebus.model.BusLocation;
+import com.backend.onebus.service.MetricsService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -26,6 +27,9 @@ public class BusStreamingService {
     @Autowired
     private SimpMessagingTemplate messagingTemplate;
     
+    @Autowired
+    private MetricsService metricsService;
+    
     // Track active subscriptions: Map<busNumber_direction, Set<sessionId>>
     private final Map<String, Set<String>> activeSubscriptions = new ConcurrentHashMap<>();
     // Map canonical (lowercase) subscription key -> original subscriptionKey(s)
@@ -46,6 +50,10 @@ public class BusStreamingService {
         // Also register the canonical key mapping
         String canonical = (busNumber + "_" + direction).toLowerCase();
         canonicalToOriginalKeys.computeIfAbsent(canonical, k -> ConcurrentHashMap.newKeySet()).add(subscriptionKey);
+        
+        // Record metrics
+        metricsService.recordWebSocketConnection(sessionId, busNumber, direction);
+        
         logger.info("Client {} subscribed to bus {} direction {} (key: {})", sessionId, busNumber, direction, subscriptionKey);
         logger.debug("Current active subscriptions: {}", activeSubscriptions.keySet());
         
@@ -92,7 +100,8 @@ public class BusStreamingService {
         // Send current location immediately if available
         BusLocation currentLocation = getBusLocationById(busId);
         if (currentLocation != null) {
-            messagingTemplate.convertAndSendToUser(sessionId, "/topic/bus/" + busId, currentLocation);
+            // Broadcast on the public topic so any subscriber to /topic/bus/{busId} receives it
+            messagingTemplate.convertAndSend("/topic/bus/" + busId, currentLocation);
         }
     }
     
@@ -125,6 +134,9 @@ public class BusStreamingService {
      * Remove all subscriptions for a disconnected client
      */
     public void removeClientSubscriptions(String sessionId) {
+        // Record disconnection metrics
+        metricsService.recordWebSocketDisconnection(sessionId);
+        
         // Remove from route-based subscriptions
         activeSubscriptions.values().forEach(subscribers -> subscribers.remove(sessionId));
         activeSubscriptions.entrySet().removeIf(entry -> entry.getValue().isEmpty());
@@ -168,6 +180,9 @@ public class BusStreamingService {
      * Broadcast bus location update to all subscribed clients
      */
     public void broadcastBusUpdate(BusLocation location) {
+        long startTime = System.currentTimeMillis();
+        int totalSubscribers = 0;
+        
         if (location.getBusId() == null) {
             logger.warn("Cannot broadcast: busId is null");
             return;
@@ -179,10 +194,8 @@ public class BusStreamingService {
             logger.info("Broadcasting update for specific bus {} to {} subscribers", 
                         location.getBusId(), specificSubscribers.size());
             
-            for (String sessionId : specificSubscribers) {
-                String destination = "/topic/bus/" + location.getBusId();
-                messagingTemplate.convertAndSendToUser(sessionId, destination, location);
-            }
+            // Broadcast once to the public topic; all subscribed clients will receive
+            messagingTemplate.convertAndSend("/topic/bus/" + location.getBusId(), location);
         }
         
         // Also broadcast to route-based subscribers (for backward compatibility)
@@ -209,6 +222,10 @@ public class BusStreamingService {
                 logger.debug("Active subscriptions: {}", activeSubscriptions.keySet());
             }
         }
+        
+        // Record broadcast metrics
+        long broadcastTime = System.currentTimeMillis() - startTime;
+        metricsService.recordWebSocketBroadcast(location.getBusId(), totalSubscribers, broadcastTime);
     }
 
     /**
@@ -264,9 +281,7 @@ public class BusStreamingService {
                 
                 BusLocation currentLocation = getCurrentBusLocation(busNumber, direction);
                 if (currentLocation != null) {
-                    for (String sessionId : entry.getValue()) {
-                        messagingTemplate.convertAndSendToUser(sessionId, "/topic/bus/" + entry.getKey(), currentLocation);
-                    }
+                    messagingTemplate.convertAndSend("/topic/bus/" + entry.getKey(), currentLocation);
                 }
             }
         }

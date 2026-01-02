@@ -20,6 +20,7 @@ import com.backend.onebus.service.BusTrackingService;
 import com.backend.onebus.service.BusSelectionService;
 import com.backend.onebus.service.RegisteredBusService;
 import com.backend.onebus.service.DashboardStatsService;
+import com.backend.onebus.service.MetricsService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.core.io.ClassPathResource;
@@ -73,6 +74,8 @@ public class BusTrackingController {
     private RegisteredBusService registeredBusService;
     @Autowired
     private DashboardStatsService dashboardStatsService;
+    @Autowired
+    private MetricsService metricsService;
     private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(BusTrackingController.class);
 
     @PostMapping("/tracker/payload")
@@ -82,8 +85,17 @@ public class BusTrackingController {
         @ApiResponse(responseCode = "400", description = "Invalid payload format")
     })
     public ResponseEntity<?> receiveTrackerPayload(@RequestBody BusLocation payload) {
+        long startTime = System.currentTimeMillis();
         logger.info("Received tracker payload: {}", payload);
+        
+        // Record metrics
+        metricsService.recordTrackerPayloadReceived(payload.getBusId(), payload.getTrackerImei());
+        
         trackingService.processTrackerPayload(payload);
+        
+        long processingTime = System.currentTimeMillis() - startTime;
+        metricsService.recordBusLocationProcessed(payload.getBusId(), processingTime);
+        
         return ResponseEntity.ok().build();
     }
 
