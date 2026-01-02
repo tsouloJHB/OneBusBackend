@@ -4,6 +4,7 @@ import com.backend.onebus.repository.RouteStopRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Component;
 
 /**
@@ -19,6 +20,9 @@ public class BusCompanyStrategyFactory {
     
     @Autowired
     private RouteStopRepository routeStopRepository;
+    
+    @Autowired
+    private RedisTemplate<String, Object> redisTemplate;
     
     /**
      * Get the routing strategy for a bus company.
@@ -43,8 +47,9 @@ public class BusCompanyStrategyFactory {
             strategy = new DefaultRoutingStrategy();
         }
         
-        // Set the repository on the strategy
+        // Set the repository and Redis template on the strategy
         strategy.setRouteStopRepository(routeStopRepository);
+        strategy.setRedisTemplate(redisTemplate);
         
         logger.debug("Using {} strategy for company: {}", strategy.getClass().getSimpleName(), companyName);
         return strategy;

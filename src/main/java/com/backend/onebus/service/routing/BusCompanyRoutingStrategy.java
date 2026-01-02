@@ -6,8 +6,12 @@ import com.backend.onebus.model.RouteStop;
 import com.backend.onebus.repository.RouteStopRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.redis.core.RedisTemplate;
 
 import java.util.List;
+import java.util.ArrayList;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Base abstract class for bus company routing strategies.
@@ -22,11 +26,17 @@ public abstract class BusCompanyRoutingStrategy {
     
     protected static final Logger logger = LoggerFactory.getLogger(BusCompanyRoutingStrategy.class);
     protected static final double STOP_PROXIMITY_METERS = 30.0;
+    private static final String BUS_LOCATION_KEY = "bus:location:";
     
     protected RouteStopRepository routeStopRepository;
+    protected RedisTemplate<String, Object> redisTemplate;
     
     public void setRouteStopRepository(RouteStopRepository routeStopRepository) {
         this.routeStopRepository = routeStopRepository;
+    }
+    
+    public void setRedisTemplate(RedisTemplate<String, Object> redisTemplate) {
+        this.redisTemplate = redisTemplate;
     }
     
     /**
@@ -194,4 +204,136 @@ public abstract class BusCompanyRoutingStrategy {
      * Get the company name this strategy is designed for
      */
     public abstract String getCompanyName();
+    
+    // ============ Smart Bus Selection Methods (Company-specific) ============
+    
+    /**
+     * Select the best bus for a client based on company-specific logic.
+     * Default implementation provides basic fallback logic.
+     * Companies can override this for their specific selection strategies.
+     * 
+     * @param busNumber The bus route number
+     * @param direction The requested direction
+     * @param clientLat Client latitude
+     * @param clientLon Client longitude
+     * @param clientBusStopIndex Client's bus stop index
+     * @return The selected bus ID, or null if no suitable bus found
+     */
+    public String selectBestBusForClient(String busNumber, String direction, 
+                                       double clientLat, double clientLon, int clientBusStopIndex) {
+        // Default implementation - companies can override for specific logic
+        logger.info("[{}] Using default bus selection for client at index {} on route {} {}", 
+                   getCompanyName(), clientBusStopIndex, busNumber, direction);
+        
+        return selectBestBusDefault(busNumber, direction, clientLat, clientLon, clientBusStopIndex);
+    }
+    
+    /**
+     * Check if this company supports smart bus selection (Shadow Bus strategy).
+     * Companies that don't support it will use traditional subscription only.
+     * 
+     * @return true if company supports smart bus selection, false otherwise
+     */
+    public boolean supportsSmartBusSelection() {
+        return false; // Default: no smart selection
+    }
+    
+    /**
+     * Default bus selection logic that can be used by any company.
+     * This implements the basic Shadow Bus strategy.
+     */
+    protected String selectBestBusDefault(String busNumber, String direction, 
+                                        double clientLat, double clientLon, int clientBusStopIndex) {
+        // 1. Get all active buses for this route in the requested direction
+        List<BusLocation> busesRequestedDir = getActiveBusesForRoute(busNumber, direction);
+        // 2. Get all active buses for this route in the opposite direction
+        String oppositeDirection = direction.equalsIgnoreCase("Northbound") ? "Southbound" : "Northbound";
+        List<BusLocation> busesOppositeDir = getActiveBusesForRoute(busNumber, oppositeDirection);
+
+        // 3. Filter buses in requested direction: at or ahead of client
+        List<BusLocation> suitableRequested = busesRequestedDir.stream()
+            .filter(bus -> bus.getBusStopIndex() != null && bus.getBusStopIndex() >= clientBusStopIndex)
+            .collect(Collectors.toList());
+
+        if (!suitableRequested.isEmpty()) {
+            // 4. Return the closest bus in requested direction
+            BusLocation best = findClosestIndexBus(suitableRequested, clientBusStopIndex);
+            logger.info("[{}] Selected bus {} (index: {}) in requested direction {} for client at index {}", 
+                getCompanyName(), best.getBusId(), best.getBusStopIndex(), direction, clientBusStopIndex);
+            return best.getBusId();
+        }
+
+        // 5. If no suitable bus in requested direction, try opposite direction
+        if (!busesOppositeDir.isEmpty()) {
+            // Never suggest a bus with a negative index
+            List<BusLocation> suitableOpposite = busesOppositeDir.stream()
+                .filter(bus -> bus.getBusStopIndex() != null && bus.getBusStopIndex() >= 0)
+                .collect(Collectors.toList());
+            if (!suitableOpposite.isEmpty()) {
+                BusLocation bestOpp = findClosestIndexBus(suitableOpposite, clientBusStopIndex);
+                logger.info("[{}] Selected bus {} (index: {}) in opposite direction {} for client at index {}", 
+                    getCompanyName(), bestOpp.getBusId(), bestOpp.getBusStopIndex(), oppositeDirection, clientBusStopIndex);
+                return bestOpp.getBusId();
+            }
+        }
+
+        // 6. No buses available in either direction
+        logger.warn("[{}] No buses available for route {} in either direction.", getCompanyName(), busNumber);
+        return null;
+    }
+    
+    /**
+     * Get all active buses for a specific route and direction
+     */
+    protected List<BusLocation> getActiveBusesForRoute(String busNumber, String direction) {
+        List<BusLocation> activeBuses = new ArrayList<>();
+        
+        if (redisTemplate == null) {
+            logger.warn("[{}] RedisTemplate not available for bus selection", getCompanyName());
+            return activeBuses;
+        }
+        
+        try {
+            Set<String> keys = redisTemplate.keys(BUS_LOCATION_KEY + "*");
+            
+            if (keys != null) {
+                for (String key : keys) {
+                    BusLocation location = (BusLocation) redisTemplate.opsForValue().get(key);
+                    
+                    if (location != null && 
+                        busNumber.equalsIgnoreCase(location.getBusNumber()) && 
+                        direction.equalsIgnoreCase(location.getTripDirection()) &&
+                        location.getBusStopIndex() != null) {
+                        activeBuses.add(location);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            logger.error("[{}] Error getting active buses for route {} {}: {}", 
+                        getCompanyName(), busNumber, direction, e.getMessage());
+        }
+        
+        return activeBuses;
+    }
+    
+    /**
+     * Find the bus with the closest index to the client's index
+     */
+    protected BusLocation findClosestIndexBus(List<BusLocation> suitableBuses, int clientBusStopIndex) {
+        if (suitableBuses.isEmpty()) return null;
+        
+        // Sort by index difference (closest first)
+        suitableBuses.sort((bus1, bus2) -> {
+            int diff1 = Math.abs(bus1.getBusStopIndex() - clientBusStopIndex);
+            int diff2 = Math.abs(bus2.getBusStopIndex() - clientBusStopIndex);
+            return Integer.compare(diff1, diff2);
+        });
+        
+        BusLocation bestBus = suitableBuses.get(0);
+        logger.debug("[{}] Closest bus: {} (index: {}, difference: {})", 
+                    getCompanyName(), bestBus.getBusId(), bestBus.getBusStopIndex(), 
+                    Math.abs(bestBus.getBusStopIndex() - clientBusStopIndex));
+        
+        return bestBus;
+    }
 }

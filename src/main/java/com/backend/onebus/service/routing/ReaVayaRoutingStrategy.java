@@ -75,4 +75,29 @@ public class ReaVayaRoutingStrategy extends BusCompanyRoutingStrategy {
         }
         return null;
     }
+    
+    // ============ Smart Bus Selection (Shadow Bus Strategy) ============
+
+    /**
+     * Rea Vaya supports smart bus selection with Shadow Bus strategy.
+     * This enables fallback bus selection when no buses are available in the requested direction.
+     */
+    @Override
+    public boolean supportsSmartBusSelection() {
+        return true;
+    }
+
+    /**
+     * Rea Vaya smart bus selection with Shadow Bus strategy.
+     * Implements the same logic as BusSelectionService but within the Rea Vaya strategy.
+     */
+    @Override
+    public String selectBestBusForClient(String busNumber, String direction, 
+                                       double clientLat, double clientLon, int clientBusStopIndex) {
+        logger.info("[Rea Vaya] Smart bus selection for client at index {} on route {} {}", 
+                   clientBusStopIndex, busNumber, direction);
+        
+        // Use the default Shadow Bus strategy implementation
+        return selectBestBusDefault(busNumber, direction, clientLat, clientLon, clientBusStopIndex);
+    }
 }

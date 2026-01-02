@@ -51,4 +51,29 @@ public class MetroBusRoutingStrategy extends BusCompanyRoutingStrategy {
         logger.debug("[Metro Bus] Using Rea Vaya fallback for end-of-route handling");
         return reaVayaFallback.handleEndOfRoute(current, route);
     }
+    
+    // ============ Smart Bus Selection (Shadow Bus Strategy) ============
+
+    /**
+     * Metro Bus supports smart bus selection with Shadow Bus strategy.
+     * This enables fallback bus selection when no buses are available in the requested direction.
+     */
+    @Override
+    public boolean supportsSmartBusSelection() {
+        return true;
+    }
+
+    /**
+     * Metro Bus smart bus selection with Shadow Bus strategy.
+     * Uses the same logic as Rea Vaya for now, but can be customized later.
+     */
+    @Override
+    public String selectBestBusForClient(String busNumber, String direction, 
+                                       double clientLat, double clientLon, int clientBusStopIndex) {
+        logger.info("[Metro Bus] Smart bus selection for client at index {} on route {} {}", 
+                   clientBusStopIndex, busNumber, direction);
+        
+        // Use the default Shadow Bus strategy implementation
+        return selectBestBusDefault(busNumber, direction, clientLat, clientLon, clientBusStopIndex);
+    }
 }

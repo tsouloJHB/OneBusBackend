@@ -3,6 +3,9 @@ package com.backend.onebus.controller;
 import com.backend.onebus.service.BusStreamingService;
 import com.backend.onebus.service.BusSelectionService;
 import com.backend.onebus.service.MetricsService;
+import com.backend.onebus.service.routing.BusCompanyStrategyFactory;
+import com.backend.onebus.service.routing.BusCompanyRoutingStrategy;
+import com.backend.onebus.repository.BusNumberRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,6 +35,12 @@ public class BusStreamingController {
     
     @Autowired
     private MetricsService metricsService;
+    
+    @Autowired
+    private BusCompanyStrategyFactory strategyFactory;
+    
+    @Autowired
+    private BusNumberRepository busNumberRepository;
     
     /**
      * Handle subscription request from client with location and bus stop index
@@ -68,8 +77,20 @@ public class BusStreamingController {
         
         // Use smart bus selection if client provides location and bus stop index
         if (clientLat != null && clientLon != null && clientBusStopIndex != null) {
-            String selectedBusId = busSelectionService.selectBestBusForClient(
-                busNumber, direction, clientLat, clientLon, clientBusStopIndex);
+            // Get company name for this bus number to determine routing strategy
+            String companyName = getCompanyNameForBusNumber(busNumber);
+            BusCompanyRoutingStrategy strategy = strategyFactory.getStrategy(companyName);
+            
+            String selectedBusId = null;
+            
+            // Check if this company supports smart bus selection
+            if (strategy.supportsSmartBusSelection()) {
+                logger.info("Using company-specific smart bus selection for {} ({})", companyName, busNumber);
+                selectedBusId = strategy.selectBestBusForClient(busNumber, direction, clientLat, clientLon, clientBusStopIndex);
+            } else {
+                logger.info("Company {} does not support smart bus selection, using traditional subscription", companyName);
+                // Fall back to traditional subscription for companies that don't support smart selection
+            }
             
             if (selectedBusId != null) {
                 streamingService.subscribeToSpecificBus(sessionId, selectedBusId);
@@ -81,8 +102,8 @@ public class BusStreamingController {
                 // Record smart bus selection metrics
                 metricsService.recordSmartBusSelection(sessionId, direction, selectedBusId, false);
                 
-                logger.info("Smart bus selection for session {}: selected bus {} for route {} {}", 
-                           sessionId, selectedBusId, busNumber, direction);
+                logger.info("Smart bus selection for session {}: selected bus {} for route {} {} using {} strategy", 
+                           sessionId, selectedBusId, busNumber, direction, companyName);
                 
                 Map<String, Object> response = Map.of(
                     "status", "success",
@@ -91,6 +112,7 @@ public class BusStreamingController {
                     "direction", direction,
                     "selectedBusId", selectedBusId,
                     "selectionType", "smart",
+                    "companyStrategy", companyName,
                     "sessionId", sessionId
                 );
                 logger.info("Sending subscription response to session {}: {}", sessionId, response);
@@ -105,7 +127,8 @@ public class BusStreamingController {
                     "message", "Subscribed to bus " + busNumber + " " + direction + " (no specific bus available)",
                     "busNumber", busNumber,
                     "direction", direction,
-                    "selectionType", "traditional"
+                    "selectionType", "traditional",
+                    "companyStrategy", companyName
                 );
             }
         } else {
@@ -204,5 +227,32 @@ public class BusStreamingController {
             "sessionId", sessionId,
             "timestamp", new java.util.Date().toString()
         );
+    }
+    
+    /**
+     * Helper method to get company name for a bus number.
+     * This is used to determine which routing strategy to use for smart bus selection.
+     */
+    private String getCompanyNameForBusNumber(String busNumber) {
+        try {
+            // Find any active bus number entry for this bus number
+            // Note: A bus number might exist for multiple companies, but we'll take the first active one
+            var busNumbers = busNumberRepository.findByIsActiveTrue();
+            
+            for (var busNumberEntity : busNumbers) {
+                if (busNumber.equalsIgnoreCase(busNumberEntity.getBusNumber())) {
+                    String companyName = busNumberEntity.getBusCompany().getName();
+                    logger.debug("Found company '{}' for bus number '{}'", companyName, busNumber);
+                    return companyName;
+                }
+            }
+            
+            logger.warn("No company found for bus number '{}', using default strategy", busNumber);
+            return null; // Will use default strategy
+            
+        } catch (Exception e) {
+            logger.error("Error getting company name for bus number '{}': {}", busNumber, e.getMessage());
+            return null; // Will use default strategy
+        }
     }
 } 
