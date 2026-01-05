@@ -7,7 +7,8 @@ import org.springframework.data.repository.query.Param;
 import java.util.List;
 
 public interface BusRepository extends JpaRepository<Bus, String> {
-    Bus findByTrackerImei(String trackerImei);
+    @Query("SELECT b FROM Bus b LEFT JOIN FETCH b.busCompany WHERE b.trackerImei = :trackerImei")
+    Bus findByTrackerImei(@Param("trackerImei") String trackerImei);
     
     /**
      * Find all buses by company name

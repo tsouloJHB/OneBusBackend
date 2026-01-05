@@ -96,9 +96,9 @@ def simulate_bus(stops, tracker_imei, direction, bus_number, delay_seconds=DELAY
                 "lat": stop["lat"],
                 "lon": stop["lon"],
                 "timestamp": timestamp,
-                "busStopIndex": stop["bus_stop_index"],
+                #"busStopIndex": stop["bus_stop_index"],
                 "busCompany": "Rea Vaya",
-                "tripDirection": direction  # use original case (e.g. 'Northbound' / 'Southbound')
+                #"tripDirection": direction  # use original case (e.g. 'Northbound' / 'Southbound')
             }
             
             print(f"✓ [{speed_label}] {direction} Bus {bus_number} at stop {current_stop_index + 1}/{len(stops)}: {stop['address']}")
@@ -137,9 +137,9 @@ if __name__ == "__main__":
     
     # Simulate two buses on the same route with different speeds
     import threading
-    # Bus 1 (C5-A) - Normal speed on Northbound route
+    # Bus 1 (C5-A) - Normal speed on Southbound route
     t1 = threading.Thread(target=simulate_bus, args=(southbound_stops, "123456789012345", "Southbound", "C5", DELAY_SECONDS))
-    # Bus 2 (C5-B) - Fast speed on Northbound route (same route, faster bus)
+    # Bus 2 (C5-B) - Fast speed on Southbound route (same route, faster bus)
     t2 = threading.Thread(target=simulate_bus, args=(southbound_stops, "Rea1234567789", "Southbound", "C5", FAST_DELAY_SECONDS))
     
     print("🚀 Starting parallel bus simulations on the same route...")

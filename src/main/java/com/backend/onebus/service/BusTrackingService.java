@@ -170,6 +170,29 @@ public class BusTrackingService {
             // Use the company name or the legacy busCompanyName field
             String companyName = (bus.getBusCompany() != null) ? 
                 bus.getBusCompany().getName() : bus.getBusCompanyName();
+            
+            // CRITICAL: Initialize tripDirection from route default for first GPS
+            // Fetch route immediately to get direction, even if company is unknown
+            Route initialRoute = null;
+            if (payload.getBusNumber() != null) {
+                initialRoute = routeRepository.findByBusNumber(payload.getBusNumber()).stream().findFirst().orElse(null);
+                if (initialRoute != null) {
+                    // Set direction from route regardless of whether we found company
+                    if (initialRoute.getDirection() != null) {
+                        payload.setTripDirection(initialRoute.getDirection());
+                        logger.info("[INIT] Set tripDirection='{}' for bus {} from route", 
+                            initialRoute.getDirection(), bus.getBusId());
+                    }
+                    // Also try to resolve company from route if not found
+                    if (companyName == null && initialRoute.getCompany() != null) {
+                        companyName = initialRoute.getCompany();
+                        logger.info("[INIT] Resolved company='{}' for bus {} from route", companyName, bus.getBusId());
+                    }
+                } else {
+                    logger.warn("[INIT] No route found for bus {}", bus.getBusNumber());
+                }
+            }
+            
             if (bus.getBusCompany() != null) {
                 companyId = bus.getBusCompany().getId();
             }
@@ -189,6 +212,18 @@ public class BusTrackingService {
             payload.setBusDriverId(cachedLocation.getBusDriverId());
             payload.setBusDriver(cachedLocation.getBusDriver());
             payload.setBusCompany(cachedLocation.getBusCompany());
+            payload.setTripDirection(cachedLocation.getTripDirection());
+            
+            // CRITICAL FIX: If cached tripDirection is null, initialize from route
+            if (payload.getTripDirection() == null && payload.getBusNumber() != null) {
+                Route route = routeRepository.findByBusNumber(payload.getBusNumber()).stream().findFirst().orElse(null);
+                if (route != null && route.getDirection() != null) {
+                    payload.setTripDirection(route.getDirection());
+                    logger.info("[CACHED-INIT] Set tripDirection='{}' for cached bus {} from route", 
+                        route.getDirection(), payload.getBusId());
+                }
+            }
+            
             if (bus != null && bus.getBusCompany() != null) {
                 companyId = bus.getBusCompany().getId();
             }
@@ -245,6 +280,13 @@ public class BusTrackingService {
                     } else {
                         payload.setBusStopIndex(nearbyStop.getBusStopIndex());
                     }
+                }
+                
+                // Step 4: Final fallback - if still no direction (first GPS, no nearby stop), use route default
+                if (payload.getTripDirection() == null && cachedLocation == null && route != null) {
+                    payload.setTripDirection(route.getDirection());
+                    logger.info("[Fallback] Bus {} first GPS with no direction determined - using route default: {}", 
+                        busNumber, route.getDirection());
                 }
                 
             } catch (Exception e) {

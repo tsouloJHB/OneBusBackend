@@ -11,6 +11,7 @@ com/backend/onebus/dto/RouteUpdateDTO.class
 com/backend/onebus/service/routing/BusCompanyRoutingStrategy.class
 com/backend/onebus/controller/DriverController.class
 com/backend/onebus/controller/GlobalExceptionHandler.class
+com/backend/onebus/service/MetricsService$WebSocketSessionMetric.class
 com/backend/onebus/dto/ActiveBusDTO$LocationInfo.class
 com/backend/onebus/repository/BusLocationRepository.class
 com/backend/onebus/controller/FullRouteController$FullRouteResponse.class
@@ -23,6 +24,7 @@ com/backend/onebus/service/BusStreamingService.class
 com/backend/onebus/controller/FullRouteController$1.class
 com/backend/onebus/config/OpenApiConfig.class
 com/backend/onebus/controller/FullRouteController$FullRouteRequest.class
+com/backend/onebus/controller/BusStreamingController.class
 com/backend/onebus/controller/BusNumberController.class
 com/backend/onebus/model/RouteStop.class
 com/backend/onebus/dto/BusCompanyCreateDTO.class
@@ -52,6 +54,7 @@ com/backend/onebus/controller/DashboardController.class
 com/backend/onebus/model/BusStop.class
 com/backend/onebus/repository/FullRouteRepository.class
 com/backend/onebus/model/DashboardStats.class
+com/backend/onebus/service/MetricsService$TrackingPipelineMetric.class
 com/backend/onebus/config/StaticResourceConfig.class
 com/backend/onebus/model/BusLocation.class
 com/backend/onebus/repository/UserRepository.class
@@ -78,8 +81,10 @@ com/backend/onebus/dto/RegisterRequestDTO.class
 com/backend/onebus/dto/BusNumberResponseDTO.class
 com/backend/onebus/constants/RuleConstants.class
 com/backend/onebus/service/BusNumberService.class
+com/backend/onebus/controller/MetricsController.class
 com/backend/onebus/dto/RegisteredBusCreateDTO.class
 com/backend/onebus/model/BusNumber.class
+com/backend/onebus/service/MetricsService.class
 com/backend/onebus/dto/DriverRegistrationRequest.class
 com/backend/onebus/controller/BusNumberController$ErrorResponse.class
 com/backend/onebus/dto/DriverDTO.class

@@ -19,6 +19,9 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Hidden;
 
+import java.util.HashMap;
+import java.util.Map;
+
 import java.util.Map;
 
 @Controller
@@ -122,14 +125,16 @@ public class BusStreamingController {
                 streamingService.subscribeToBus(sessionId, busNumber, direction);
                 logger.info("No suitable bus found, using traditional subscription for session {} to bus {} direction {}", 
                            sessionId, busNumber, direction);
-                return Map.of(
-                    "status", "success",
-                    "message", "Subscribed to bus " + busNumber + " " + direction + " (no specific bus available)",
-                    "busNumber", busNumber,
-                    "direction", direction,
-                    "selectionType", "traditional",
-                    "companyStrategy", companyName
-                );
+                
+                Map<String, Object> response = new HashMap<>();
+                response.put("status", "success");
+                response.put("message", "Subscribed to bus " + busNumber + " " + direction + " (no specific bus available)");
+                response.put("busNumber", busNumber);
+                response.put("direction", direction);
+                response.put("selectionType", "traditional");
+                response.put("companyStrategy", companyName); // Can be null
+                response.put("sessionId", sessionId);
+                return response;
             }
         } else {
             // Traditional subscription without location
