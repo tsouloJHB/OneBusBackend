@@ -252,6 +252,41 @@ public class BusStreamingService {
                 logger.debug("No route subscribers found for key: {}", subscriptionKey);
                 logger.debug("Active subscriptions: {}", activeSubscriptions.keySet());
             }
+            
+            // FALLBACK BROADCAST: Also send to opposite direction subscribers as fallback
+            // This allows clients subscribing to Northbound to receive Southbound buses and vice versa
+            String oppositeDirection = location.getTripDirection().equalsIgnoreCase("Northbound") ? "Southbound" : "Northbound";
+            String oppositeKey = location.getBusNumber() + "_" + oppositeDirection;
+            String oppositeCanonical = oppositeKey.toLowerCase();
+            Set<String> oppositeOriginals = canonicalToOriginalKeys.get(oppositeCanonical);
+            
+            if (oppositeOriginals != null && !oppositeOriginals.isEmpty()) {
+                for (String activeKey : oppositeOriginals) {
+                    Set<String> fallbackSubscribers = activeSubscriptions.get(activeKey);
+                    if (fallbackSubscribers != null && !fallbackSubscribers.isEmpty()) {
+                        logger.info("[FALLBACK] Broadcasting {} data to {} subscribers waiting for {} (key: {})", 
+                                    location.getTripDirection(), fallbackSubscribers.size(), oppositeDirection, activeKey);
+                        
+                        // Send with fallback flag so client knows this is opposite direction
+                        Map<String, Object> fallbackLocation = new HashMap<>();
+                        fallbackLocation.put("busId", location.getBusId());
+                        fallbackLocation.put("busNumber", location.getBusNumber());
+                        fallbackLocation.put("tripDirection", location.getTripDirection());
+                        fallbackLocation.put("lat", location.getLat());
+                        fallbackLocation.put("lon", location.getLon());
+                        fallbackLocation.put("speedKmh", location.getSpeedKmh());
+                        fallbackLocation.put("timestamp", location.getTimestamp());
+                        fallbackLocation.put("busStopIndex", location.getBusStopIndex());
+                        fallbackLocation.put("isFallback", true);
+                        fallbackLocation.put("requestedDirection", oppositeDirection);
+                        fallbackLocation.put("actualDirection", location.getTripDirection());
+                        
+                        String destination = "/topic/bus/" + activeKey;
+                        messagingTemplate.convertAndSend(destination, fallbackLocation);
+                        totalSubscribers += fallbackSubscribers.size();
+                    }
+                }
+            }
         }
         
         // Record broadcast metrics
