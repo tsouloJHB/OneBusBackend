@@ -31,6 +31,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.Arrays;
 import java.util.Map;
+import java.util.LinkedHashMap;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -219,16 +220,46 @@ public class BusTrackingController {
                     .toList();
                 }
 
+            // Deduplicate by tracker IMEI - keep only the most recent location for each bus
+            Map<String, BusLocation> deduplicatedByImei = new LinkedHashMap<>();
+            for (BusLocation location : activeLocations) {
+                String imei = location.getTrackerImei();
+                if (deduplicatedByImei.containsKey(imei)) {
+                    // Keep the one with the more recent timestamp (ISO format timestamps are lexicographically comparable)
+                    BusLocation existing = deduplicatedByImei.get(imei);
+                    if (location.getTimestamp().compareTo(existing.getTimestamp()) > 0) {
+                        deduplicatedByImei.put(imei, location);
+                    }
+                } else {
+                    deduplicatedByImei.put(imei, location);
+                }
+            }
+            activeLocations = new ArrayList<>(deduplicatedByImei.values());
+
             List<ActiveBusDTO> response = new ArrayList<>();
 
             for (BusLocation location : activeLocations) {
                 // Look up bus for richer metadata
                 Bus busEntity = busRepository.findByTrackerImei(location.getTrackerImei());
 
-                // Look up route (best effort)
-                Route routeEntity = routeRepository
-                        .findByCompanyAndBusNumber(location.getBusCompany(), location.getBusNumber())
-                        .orElse(null);
+                // Look up route (best effort) - handle multiple routes
+                Route routeEntity = null;
+                try {
+                    java.util.List<Route> routes = routeRepository.findByBusNumber(location.getBusNumber());
+                    if (!routes.isEmpty()) {
+                        // Try to match current direction
+                        if (location.getTripDirection() != null) {
+                            routeEntity = routes.stream()
+                                .filter(r -> location.getTripDirection().equalsIgnoreCase(r.getDirection()))
+                                .findFirst()
+                                .orElse(routes.get(0));
+                        } else {
+                            routeEntity = routes.get(0);
+                        }
+                    }
+                } catch (Exception e) {
+                    // Ignore route lookup errors
+                }
 
                 ActiveBusDTO.BusInfo busInfo = new ActiveBusDTO.BusInfo(
                         location.getBusId(),
@@ -568,8 +599,22 @@ public class BusTrackingController {
                 String busNumber = routeNode.get("busNumber").asText();
                 String routeName = routeNode.get("routeName").asText();
 
-                // Create or update route
-                Route route = routeRepository.findByCompanyAndBusNumber(company, busNumber).orElse(new Route());
+                // Create or update route - handle multiple routes by checking direction
+                Route route = null;
+                try {
+                    java.util.List<Route> routes = routeRepository.findByBusNumber(busNumber);
+                    if (!routes.isEmpty()) {
+                        route = routes.stream()
+                            .filter(r -> r.getCompany() != null && r.getCompany().equalsIgnoreCase(company))
+                            .findFirst()
+                            .orElse(null);
+                    }
+                } catch (Exception e) {
+                    // Ignore
+                }
+                if (route == null) {
+                    route = new Route();
+                }
                 route.setCompany(company);
                 route.setBusNumber(busNumber);
                 route.setRouteName(routeName);

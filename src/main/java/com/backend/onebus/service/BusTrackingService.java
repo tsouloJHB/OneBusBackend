@@ -82,9 +82,20 @@ public class BusTrackingService {
         if (routeStopsCache.containsKey(cacheKey)) return;
         
         try {
-            // Find route in database
-            Route route = routeRepository.findByCompanyAndBusNumber(company, busNumber)
-                    .orElse(null);
+            // Find route in database (handle multiple routes by bus number)
+            Route route = null;
+            try {
+                java.util.List<Route> routes = routeRepository.findByBusNumber(busNumber);
+                if (!routes.isEmpty()) {
+                    // Prefer route matching company if multiple exist
+                    route = routes.stream()
+                        .filter(r -> r.getCompany() != null && r.getCompany().equalsIgnoreCase(company))
+                        .findFirst()
+                        .orElse(routes.get(0));  // Fallback to first route
+                }
+            } catch (Exception e) {
+                logger.warn("Error fetching route for company: {} and busNumber: {}: {}", company, busNumber, e.getMessage());
+            }
             
             if (route == null) {
                 logger.warn("No route found for company: {} and busNumber: {}", company, busNumber);
@@ -143,7 +154,31 @@ public class BusTrackingService {
         return R * c;
     }
 
+    private static final String LAST_PAYLOAD_KEY = "last:payload:";
+    
     public void processTrackerPayload(BusLocation payload) {
+        // Deduplication: Check if we've already processed this exact payload recently
+        String dedupeKey = LAST_PAYLOAD_KEY + payload.getTrackerImei();
+        Object lastPayload = redisTemplate.opsForValue().get(dedupeKey);
+        
+        if (lastPayload != null) {
+            BusLocation last = (BusLocation) lastPayload;
+            // If same IMEI, same timestamp within 100ms, skip (duplicate)
+            if (last.getTimestamp() != null && payload.getTimestamp() != null) {
+                long timeDiff = Math.abs(
+                    Long.parseLong(payload.getTimestamp()) - 
+                    Long.parseLong(last.getTimestamp())
+                );
+                if (timeDiff < 100) {
+                    logger.warn("[DEDUPE] Skipping duplicate payload for IMEI {} within 100ms", payload.getTrackerImei());
+                    return;
+                }
+            }
+        }
+        
+        // Store this payload as the last one processed for this IMEI
+        redisTemplate.opsForValue().set(dedupeKey, payload, 5, TimeUnit.MINUTES);
+        
         // Rule 1: Validate IMEI is registered
         String redisKey = BUS_LOCATION_KEY + payload.getTrackerImei();
         BusLocation cachedLocation = (BusLocation) redisTemplate.opsForValue().get(redisKey);
@@ -241,8 +276,24 @@ public class BusTrackingService {
                 com.backend.onebus.service.routing.BusCompanyRoutingStrategy strategy = 
                     strategyFactory.getStrategy(company);
                 
-                // Get the route for this bus
-                Route route = routeRepository.findByCompanyAndBusNumber(company, busNumber).orElse(null);
+                // Get the route for this bus (if multiple routes exist, pick one matching current direction if available)
+                Route route = null;
+                try {
+                    java.util.List<Route> routes = routeRepository.findByBusNumber(busNumber);
+                    if (!routes.isEmpty()) {
+                        // Try to find route matching current direction
+                        if (payload.getTripDirection() != null) {
+                            route = routes.stream()
+                                .filter(r -> payload.getTripDirection().equalsIgnoreCase(r.getDirection()))
+                                .findFirst()
+                                .orElse(routes.get(0));  // Fallback to first route
+                        } else {
+                            route = routes.get(0);
+                        }
+                    }
+                } catch (Exception e) {
+                    logger.debug("Error fetching route for bus {}: {}", busNumber, e.getMessage());
+                }
                 
                 // Retrieve previous location from Redis to use as historical context
                 BusLocation previousLocation = cachedLocation;
@@ -311,6 +362,11 @@ public class BusTrackingService {
             }
         }
         // --- End new logic ---
+
+        // CHECK FOR ROUTE COMPLETION AND SWITCH DIRECTION
+        if (payload.getBusNumber() != null && payload.getTripDirection() != null) {
+            checkAndSwitchRouteAtEnd(payload);
+        }
 
         redisTemplate.opsForValue().set(redisKey, payload, 24, TimeUnit.HOURS);
         redisTemplate.opsForGeo().add(BUS_GEO_KEY, new RedisGeoCommands.GeoLocation<>(
@@ -446,15 +502,24 @@ public class BusTrackingService {
 
     @Scheduled(cron = "0 0 0 * * ?", zone = "Africa/Johannesburg")
     public void clearRedisData() {
-        Set<String> keys = redisTemplate.keys(BUS_LOCATION_KEY + "*");
-        if (keys != null) {
-            redisTemplate.delete(keys);
+        Set<String> locationKeys = redisTemplate.keys(BUS_LOCATION_KEY + "*");
+        if (locationKeys != null) {
+            redisTemplate.delete(locationKeys);
         }
+        
+        Set<String> activeBusKeys = redisTemplate.keys(ACTIVE_BUS_KEY_PREFIX + "*");
+        if (activeBusKeys != null) {
+            redisTemplate.delete(activeBusKeys);
+        }
+        
         redisTemplate.delete(BUS_GEO_KEY);
     }
 
     public void clearTrackingData() {
         clearRedisData();
+        // Also clear all bus location records from database
+        busLocationRepository.deleteAll();
+        logger.info("Cleared all tracking data from both Redis and database");
     }
 
     /**
@@ -511,6 +576,101 @@ public class BusTrackingService {
         
         logger.info("Cleanup complete: deleted {} orphaned buses", deleted);
         return deleted;
+    }
+
+    /**
+     * Check if bus reached the end of its current route and switch to opposite direction
+     * Northbound → Southbound, Southbound → Northbound
+     * 
+     * Uses company-specific routing strategies for Rea Vaya and Metro Bus
+     */
+    private void checkAndSwitchRouteAtEnd(BusLocation payload) {
+        try {
+            String busNumber = payload.getBusNumber();
+            String company = payload.getBusCompany();
+            Route route = routeRepository.findByBusNumber(busNumber).stream().findFirst().orElse(null);
+            
+            if (route == null) {
+                logger.debug("No route found for bus {}", busNumber);
+                return;
+            }
+            
+            // Try company-specific strategy first (Rea Vaya, Metro Bus, etc)
+            String newDirection = null;
+            if (company != null) {
+                try {
+                    com.backend.onebus.service.routing.BusCompanyRoutingStrategy strategy = 
+                        strategyFactory.getStrategy(company);
+                    newDirection = strategy.handleEndOfRoute(payload, route);
+                    
+                    if (newDirection != null && !newDirection.equalsIgnoreCase(payload.getTripDirection())) {
+                        logger.info("[STRATEGY] {} strategy detected end-of-route: {} → {}", 
+                            company, payload.getTripDirection(), newDirection);
+                    }
+                } catch (Exception e) {
+                    logger.debug("[STRATEGY] Error in {} strategy end-of-route: {}", company, e.getMessage());
+                }
+            }
+            
+            // If strategy didn't trigger, use default logic
+            if (newDirection == null) {
+                newDirection = checkAndSwitchRouteDefault(payload, route);
+            }
+            
+            // Apply the direction switch if needed
+            if (newDirection != null && !newDirection.equalsIgnoreCase(payload.getTripDirection())) {
+                payload.setTripDirection(newDirection);
+                payload.setBusStopIndex(0); // Reset to first stop
+                
+                // Update in Redis immediately
+                String redisKey = BUS_LOCATION_KEY + payload.getTrackerImei();
+                redisTemplate.opsForValue().set(redisKey, payload, 24, TimeUnit.HOURS);
+                
+                logger.info("[ROUTE-SWITCH] ✅ Bus {} switched from {} to {} (stop 0)", 
+                    payload.getBusId(), payload.getTripDirection(), newDirection);
+            }
+        } catch (Exception e) {
+            logger.error("[ROUTE-SWITCH] Error checking route completion for bus {}: {}", 
+                payload.getBusId(), e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Default route switch logic (fallback for buses without company-specific strategies)
+     */
+    private String checkAndSwitchRouteDefault(BusLocation payload, Route route) {
+        try {
+            // Get all stops for this route
+            java.util.List<RouteStop> routeStops = routeStopRepository.findByRouteIdOrderByBusStopIndex(route.getId());
+            if (routeStops.isEmpty()) {
+                return null;
+            }
+            
+            // Find max stop index for current direction
+            Integer maxStopIndex = null;
+            if ("Northbound".equalsIgnoreCase(payload.getTripDirection())) {
+                maxStopIndex = routeStops.stream()
+                    .filter(s -> s.getNorthboundIndex() != null)
+                    .map(RouteStop::getNorthboundIndex)
+                    .max(Integer::compareTo)
+                    .orElse(null);
+            } else if ("Southbound".equalsIgnoreCase(payload.getTripDirection())) {
+                maxStopIndex = routeStops.stream()
+                    .filter(s -> s.getSouthboundIndex() != null)
+                    .map(RouteStop::getSouthboundIndex)
+                    .max(Integer::compareTo)
+                    .orElse(null);
+            }
+            
+            // Check if bus reached the end
+            if (maxStopIndex != null && payload.getBusStopIndex() != null && payload.getBusStopIndex() >= maxStopIndex) {
+                return "Northbound".equalsIgnoreCase(payload.getTripDirection()) ? "Southbound" : "Northbound";
+            }
+        } catch (Exception e) {
+            logger.error("[DEFAULT] Error in default route switch logic: {}", e.getMessage());
+        }
+        
+        return null;
     }
 
     /**
