@@ -33,6 +33,10 @@ public class FullRoute {
     @Column(name = "coordinates_json", nullable = false, columnDefinition = "TEXT")
     private String coordinatesJson;
 
+    // Store pre-calculated cumulative distances in meters: [0, 50.2, 125.8, ...]
+    @Column(name = "cumulative_distances_json", columnDefinition = "TEXT")
+    private String cumulativeDistancesJson;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 

@@ -98,7 +98,7 @@ def simulate_bus(stops, tracker_imei, direction, bus_number, delay_seconds=DELAY
                 "timestamp": timestamp,
                 #"busStopIndex": stop["bus_stop_index"],
                 "busCompany": "Rea Vaya",
-                #"tripDirection": direction  # use original case (e.g. 'Northbound' / 'Southbound')
+                "tripDirection": direction  # use original case (e.g. 'Northbound' / 'Southbound')
             }
             
             print(f"✓ [{speed_label}] {direction} Bus {bus_number} at stop {current_stop_index + 1}/{len(stops)}: {stop['address']}")

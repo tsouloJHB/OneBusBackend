@@ -67,11 +67,14 @@ public class ReaVayaRoutingStrategy extends BusCompanyRoutingStrategy {
      */
     @Override
     public String handleEndOfRoute(BusLocation current, Route route) {
-        if (current.getTripDirection() != null) {
-            String newDirection = switchDirection(current.getTripDirection());
-            logger.info("[Rea Vaya] End-of-route handler: {} → {}", 
-                current.getTripDirection(), newDirection);
-            return newDirection;
+        if (current.getTripDirection() != null && route != null) {
+            // ONLY switch direction if the bus is actually at the end stop
+            if (isAtEndStop(current, route, current.getTripDirection())) {
+                String newDirection = switchDirection(current.getTripDirection());
+                logger.info("[Rea Vaya] End-of-route detected at end stop. Switching: {} → {}", 
+                    current.getTripDirection(), newDirection);
+                return newDirection;
+            }
         }
         return null;
     }

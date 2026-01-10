@@ -18,7 +18,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @RestController
@@ -28,10 +30,13 @@ public class FullRouteController {
     private static final Logger logger = LoggerFactory.getLogger(FullRouteController.class);
     private final FullRouteRepository fullRouteRepository;
     private final ObjectMapper objectMapper;
+    private final com.backend.onebus.service.RouteGeometryService routeGeometryService;
 
-    public FullRouteController(FullRouteRepository fullRouteRepository, ObjectMapper objectMapper) {
+    public FullRouteController(FullRouteRepository fullRouteRepository, ObjectMapper objectMapper,
+                               com.backend.onebus.service.RouteGeometryService routeGeometryService) {
         this.fullRouteRepository = fullRouteRepository;
         this.objectMapper = objectMapper;
+        this.routeGeometryService = routeGeometryService;
     }
 
     @GetMapping
@@ -103,6 +108,65 @@ public class FullRouteController {
         return ResponseEntity.noContent().build();
     }
 
+    @PostMapping("/maintenance/backfill-distances")
+    @Operation(summary = "Backfill cumulative distances", description = "Calculate missing cumulative distances for all existing routes")
+    public ResponseEntity<Map<String, Object>> backfillDistances() {
+        logger.info("Starting backfill of cumulative distances for all full routes...");
+        List<FullRoute> allRoutes = fullRouteRepository.findAll();
+        int totalProcessed = 0;
+        int updatedCount = 0;
+        int skippedCount = 0;
+        int errorCount = 0;
+
+        for (FullRoute route : allRoutes) {
+            totalProcessed++;
+            try {
+                // Only process if coordinates exist but cumulative distances are missing
+                String coordsJson = route.getCoordinatesJson();
+                String cumDistJson = route.getCumulativeDistancesJson();
+
+                if (coordsJson == null || coordsJson.isEmpty() || "[]".equals(coordsJson.trim())) {
+                    skippedCount++;
+                    continue;
+                }
+
+                // If already has distances, skip (unless you want to re-calculate everything)
+                if (cumDistJson != null && !cumDistJson.isEmpty() && !"[]".equals(cumDistJson.trim())) {
+                    skippedCount++;
+                    continue;
+                }
+
+                List<Coordinate> coords = objectMapper.readValue(coordsJson, new TypeReference<List<Coordinate>>() {});
+                if (!coords.isEmpty()) {
+                    List<Double> cumulativeDistances = routeGeometryService.calculateCumulativeDistances(coords);
+                    route.setCumulativeDistancesJson(objectMapper.writeValueAsString(cumulativeDistances));
+                    fullRouteRepository.save(route);
+                    updatedCount++;
+                    logger.debug("Backfilled route ID {}: {} points, total {} meters", 
+                                route.getId(), coords.size(), cumulativeDistances.get(cumulativeDistances.size() - 1));
+                } else {
+                    skippedCount++;
+                }
+
+            } catch (Exception e) {
+                logger.error("Failed to backfill distance for route ID {}: {}", route.getId(), e.getMessage());
+                errorCount++;
+            }
+        }
+
+        logger.info("Backfill complete. Updated: {}, Skipped: {}, Errors: {}, Total: {}", 
+                    updatedCount, skippedCount, errorCount, totalProcessed);
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("status", "success");
+        response.put("updated", updatedCount);
+        response.put("skipped", skippedCount);
+        response.put("errors", errorCount);
+        response.put("total", totalProcessed);
+        
+        return ResponseEntity.ok(response);
+    }
+
     private void applyRequestToEntity(FullRouteRequest request, FullRoute entity) throws Exception {
         entity.setCompanyId(request.getCompanyId());
         entity.setRouteId(request.getRouteId());
@@ -114,6 +178,15 @@ public class FullRouteController {
             coords = List.of(); // allow saving without coordinates yet
         }
         entity.setCoordinatesJson(objectMapper.writeValueAsString(coords));
+        
+        // Auto-calculate cumulative distances for route-based distance calculations
+        if (!coords.isEmpty()) {
+            List<Double> cumulativeDistances = routeGeometryService.calculateCumulativeDistances(coords);
+            entity.setCumulativeDistancesJson(objectMapper.writeValueAsString(cumulativeDistances));
+            logger.info("Calculated cumulative distances for route {} ({}): {} points, total {} meters",
+                       entity.getName(), entity.getDirection(), coords.size(), 
+                       cumulativeDistances.isEmpty() ? 0 : cumulativeDistances.get(cumulativeDistances.size() - 1));
+        }
     }
 
     private FullRouteResponse toResponse(FullRoute entity) {
@@ -129,11 +202,24 @@ public class FullRouteController {
                         entity.getDirection(),
                         entity.getDescription(),
                         List.of(),
+                        List.of(),
                         entity.getCreatedAt(),
                         entity.getUpdatedAt()
                 );
             }
             List<Coordinate> coords = objectMapper.readValue(json, new TypeReference<List<Coordinate>>() {});
+            
+            // Parse cumulative distances if available
+            List<Double> cumulativeDistances = List.of();
+            String cumDistJson = entity.getCumulativeDistancesJson();
+            if (cumDistJson != null && !cumDistJson.isEmpty() && !"[]".equals(cumDistJson.trim())) {
+                try {
+                    cumulativeDistances = objectMapper.readValue(cumDistJson, new TypeReference<List<Double>>() {});
+                } catch (Exception e) {
+                    logger.warn("Failed to parse cumulative distances for FullRoute id={}", entity.getId());
+                }
+            }
+            
             return new FullRouteResponse(
                     entity.getId(),
                     entity.getCompanyId(),
@@ -142,6 +228,7 @@ public class FullRouteController {
                     entity.getDirection(),
                     entity.getDescription(),
                     coords,
+                    cumulativeDistances,
                     entity.getCreatedAt(),
                     entity.getUpdatedAt()
             );
@@ -155,6 +242,7 @@ public class FullRouteController {
                     entity.getName(),
                     entity.getDirection(),
                     entity.getDescription(),
+                    List.of(),
                     List.of(),
                     entity.getCreatedAt(),
                     entity.getUpdatedAt()
@@ -209,6 +297,7 @@ public class FullRouteController {
             String direction,
             String description,
             List<Coordinate> coordinates,
+            List<Double> cumulativeDistances,
             java.time.LocalDateTime createdAt,
             java.time.LocalDateTime updatedAt
     ) {}

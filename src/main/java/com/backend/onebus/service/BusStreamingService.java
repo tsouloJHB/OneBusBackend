@@ -30,6 +30,12 @@ public class BusStreamingService {
     @Autowired
     private MetricsService metricsService;
     
+    @Autowired
+    private RouteGeometryService routeGeometryService;
+    
+    @Autowired
+    private com.backend.onebus.repository.RouteRepository routeRepository;
+    
     // Track active subscriptions: Map<busNumber_direction, Set<sessionId>>
     private final Map<String, Set<String>> activeSubscriptions = new ConcurrentHashMap<>();
     // Map canonical (lowercase) subscription key -> original subscriptionKey(s)
@@ -217,6 +223,38 @@ public class BusStreamingService {
                                clientSub.getDirection(), location.getBusId(), location.getTripDirection());
                 } else {
                     enhancedLocation.put("isFallback", false);
+                }
+                
+                // Calculate route-based distance for this subscriber
+                try {
+                    com.backend.onebus.model.Route route = routeRepository.findByBusNumber(clientSub.getBusNumber())
+                        .stream()
+                        .filter(r -> clientSub.getDirection().equalsIgnoreCase(r.getDirection()))
+                        .findFirst()
+                        .orElse(null);
+                    
+                    if (route != null) {
+                        RouteGeometryService.RouteDistanceResult distanceResult = 
+                            routeGeometryService.calculateRouteDistance(
+                                location.getLat(),
+                                location.getLon(),
+                                clientSub.getClientLat(),
+                                clientSub.getClientLon(),
+                                route.getId(),
+                                clientSub.getDirection()
+                            );
+                        
+                        if (distanceResult != null) {
+                            enhancedLocation.put("distanceMeters", distanceResult.distanceMeters);
+                            enhancedLocation.put("distanceKm", distanceResult.distanceKm);
+                            enhancedLocation.put("estimatedTimeMinutes", distanceResult.estimatedTimeMinutes);
+                            logger.debug("Calculated route distance for {}: {} km, ETA: {} min", 
+                                        clientSub.getSessionId(), distanceResult.distanceKm, distanceResult.estimatedTimeMinutes);
+                        }
+                    }
+                } catch (Exception e) {
+                    logger.warn("Failed to calculate distance for subscriber {}: {}", clientSub.getSessionId(), e.getMessage());
+                    // Continue without distance - client can fall back to straight-line calculation
                 }
                 
                 logger.info("SHADOW BUS: Broadcasting {} data for bus {} to requested topic {} (session: {})", 

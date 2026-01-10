@@ -8,4 +8,6 @@ public interface FullRouteRepository extends JpaRepository<FullRoute, Long> {
     List<FullRoute> findByCompanyId(Long companyId);
     List<FullRoute> findByRouteId(Long routeId);
     List<FullRoute> findByCompanyIdAndRouteId(Long companyId, Long routeId);
+    List<FullRoute> findByRouteIdAndDirection(Long routeId, String direction);
+
 }

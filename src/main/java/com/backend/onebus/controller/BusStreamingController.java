@@ -1,5 +1,7 @@
 package com.backend.onebus.controller;
 
+import org.springframework.transaction.annotation.Transactional;
+
 import com.backend.onebus.service.BusStreamingService;
 import com.backend.onebus.service.BusSelectionService;
 import com.backend.onebus.service.MetricsService;
@@ -51,6 +53,7 @@ public class BusStreamingController {
     @MessageMapping("/subscribe")
     @SendTo("/topic/bus/subscription-status")
     @Hidden
+    @Transactional
     public Map<String, Object> subscribeToBus(
             @Payload Map<String, Object> subscriptionRequest,
             SimpMessageHeaderAccessor headerAccessor) {

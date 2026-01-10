@@ -129,16 +129,32 @@ public class BusTrackingService {
         }
     }
 
-    private BusStop findNearbyStop(String company, String busNumber, double lat, double lon) {
+    private BusStop findNearbyStop(String company, String busNumber, double lat, double lon, String currentDirection) {
         loadRouteStopsIfNeeded(company, busNumber);
         String cacheKey = company + "_" + busNumber;
         List<BusStop> stops = routeStopsCache.get(cacheKey);
         if (stops == null) return null;
+        
+        // Priority 1: Find a stop that matches the current direction (or is bidirectional)
         for (BusStop stop : stops) {
             if (distanceMeters(lat, lon, stop.getLatitude(), stop.getLongitude()) <= STOP_PROXIMITY_METERS) {
-                return stop;
+                if (currentDirection == null || 
+                    "bidirectional".equalsIgnoreCase(stop.getDirection()) || 
+                    currentDirection.equalsIgnoreCase(stop.getDirection())) {
+                    return stop;
+                }
             }
         }
+        
+        // Priority 2: Fallback to any stop only if we don't have a direction yet
+        if (currentDirection == null) {
+            for (BusStop stop : stops) {
+                if (distanceMeters(lat, lon, stop.getLatitude(), stop.getLongitude()) <= STOP_PROXIMITY_METERS) {
+                    return stop;
+                }
+            }
+        }
+        
         return null;
     }
 
@@ -165,13 +181,21 @@ public class BusTrackingService {
             BusLocation last = (BusLocation) lastPayload;
             // If same IMEI, same timestamp within 100ms, skip (duplicate)
             if (last.getTimestamp() != null && payload.getTimestamp() != null) {
-                long timeDiff = Math.abs(
-                    Long.parseLong(payload.getTimestamp()) - 
-                    Long.parseLong(last.getTimestamp())
-                );
-                if (timeDiff < 100) {
-                    logger.warn("[DEDUPE] Skipping duplicate payload for IMEI {} within 100ms", payload.getTrackerImei());
-                    return;
+                try {
+                    long lastTs = parseTimestampToMillis(last.getTimestamp());
+                    long currentTs = parseTimestampToMillis(payload.getTimestamp());
+                    long timeDiff = Math.abs(currentTs - lastTs);
+                    
+                    if (timeDiff < 100) {
+                        logger.warn("[DEDUPE] Skipping duplicate payload for IMEI {} within 100ms", payload.getTrackerImei());
+                        return;
+                    }
+                } catch (Exception e) {
+                    // If parsing fails, just compare as strings as a fallback
+                    if (last.getTimestamp().equals(payload.getTimestamp())) {
+                        logger.warn("[DEDUPE] Skipping duplicate payload for IMEI {} (identical string timestamps)", payload.getTrackerImei());
+                        return;
+                    }
                 }
             }
         }
@@ -210,6 +234,7 @@ public class BusTrackingService {
             // Fetch route immediately to get direction, even if company is unknown
             Route initialRoute = null;
             if (payload.getBusNumber() != null) {
+                // Try to find any route for this bus number to get default direction
                 initialRoute = routeRepository.findByBusNumber(payload.getBusNumber()).stream().findFirst().orElse(null);
                 if (initialRoute != null) {
                     // Set direction from route regardless of whether we found company
@@ -279,15 +304,12 @@ public class BusTrackingService {
                 // Get the route for this bus (if multiple routes exist, pick one matching current direction if available)
                 Route route = null;
                 try {
-                    java.util.List<Route> routes = routeRepository.findByBusNumber(busNumber);
-                    if (!routes.isEmpty()) {
-                        // Try to find route matching current direction
-                        if (payload.getTripDirection() != null) {
-                            route = routes.stream()
-                                .filter(r -> payload.getTripDirection().equalsIgnoreCase(r.getDirection()))
-                                .findFirst()
-                                .orElse(routes.get(0));  // Fallback to first route
-                        } else {
+                    if (payload.getTripDirection() != null) {
+                        route = routeRepository.findByBusNumberAndDirection(busNumber, payload.getTripDirection()).orElse(null);
+                    }
+                    if (route == null) {
+                        java.util.List<Route> routes = routeRepository.findByBusNumber(busNumber);
+                        if (!routes.isEmpty()) {
                             route = routes.get(0);
                         }
                     }
@@ -315,7 +337,7 @@ public class BusTrackingService {
                 }
                 
                 // Step 3: Update busStopIndex based on proximity to stops
-                BusStop nearbyStop = findNearbyStop(company, busNumber, payload.getLat(), payload.getLon());
+                BusStop nearbyStop = findNearbyStop(company, busNumber, payload.getLat(), payload.getLon(), payload.getTripDirection());
                 if (nearbyStop != null) {
                     // Only update direction if not bidirectional
                     if (!"bidirectional".equalsIgnoreCase(nearbyStop.getDirection())) {
@@ -344,7 +366,7 @@ public class BusTrackingService {
                 logger.error("[Strategy] Error applying routing strategy for bus {}: {}", 
                     busNumber, e.getMessage(), e);
                 // Continue with existing logic if strategy fails
-                BusStop nearbyStop = findNearbyStop(company, busNumber, payload.getLat(), payload.getLon());
+                BusStop nearbyStop = findNearbyStop(company, busNumber, payload.getLat(), payload.getLon(), payload.getTripDirection());
                 if (nearbyStop != null) {
                     if (!"bidirectional".equalsIgnoreCase(nearbyStop.getDirection())) {
                         payload.setTripDirection(nearbyStop.getDirection());
@@ -588,7 +610,18 @@ public class BusTrackingService {
         try {
             String busNumber = payload.getBusNumber();
             String company = payload.getBusCompany();
-            Route route = routeRepository.findByBusNumber(busNumber).stream().findFirst().orElse(null);
+            String direction = payload.getTripDirection();
+            
+            // Look up the specific route for this direction
+            Route route = null;
+            if (direction != null) {
+                route = routeRepository.findByBusNumberAndDirection(busNumber, direction).orElse(null);
+            }
+            
+            // Fallback to any route if specific direction route not found
+            if (route == null) {
+                route = routeRepository.findByBusNumber(busNumber).stream().findFirst().orElse(null);
+            }
             
             if (route == null) {
                 logger.debug("No route found for bus {}", busNumber);
@@ -619,6 +652,7 @@ public class BusTrackingService {
             
             // Apply the direction switch if needed
             if (newDirection != null && !newDirection.equalsIgnoreCase(payload.getTripDirection())) {
+                String oldDirection = payload.getTripDirection();
                 payload.setTripDirection(newDirection);
                 payload.setBusStopIndex(0); // Reset to first stop
                 
@@ -627,7 +661,7 @@ public class BusTrackingService {
                 redisTemplate.opsForValue().set(redisKey, payload, 24, TimeUnit.HOURS);
                 
                 logger.info("[ROUTE-SWITCH] ✅ Bus {} switched from {} to {} (stop 0)", 
-                    payload.getBusId(), payload.getTripDirection(), newDirection);
+                    payload.getBusId(), oldDirection, newDirection);
             }
         } catch (Exception e) {
             logger.error("[ROUTE-SWITCH] Error checking route completion for bus {}: {}", 
@@ -680,5 +714,31 @@ public class BusTrackingService {
     public long getActiveBusesCount() {
         Set<String> activeBusIds = redisTemplate.keys(ACTIVE_BUS_KEY_PREFIX + "*");
         return activeBusIds != null ? activeBusIds.size() : 0;
+    }
+    /**
+     * Parse timestamp string to milliseconds. Handles both numeric strings (millis) 
+     * and ISO-8601 format strings.
+     */
+    private long parseTimestampToMillis(String timestamp) {
+        if (timestamp == null) return 0;
+        try {
+            // Try parsing as numeric milliseconds
+            return Long.parseLong(timestamp);
+        } catch (NumberFormatException e) {
+            try {
+                // Try parsing as ISO-8601
+                return java.time.Instant.parse(timestamp).toEpochMilli();
+            } catch (Exception ex) {
+                try {
+                    // Try parsing as ISO-8601 LocalDateTime if Instant fails
+                    return java.time.LocalDateTime.parse(timestamp)
+                        .atZone(java.time.ZoneId.systemDefault())
+                        .toInstant()
+                        .toEpochMilli();
+                } catch (Exception ex2) {
+                    throw new IllegalArgumentException("Invalid timestamp format: " + timestamp);
+                }
+            }
+        }
     }
 }
