@@ -31,6 +31,9 @@ public abstract class BusCompanyRoutingStrategy {
     protected RouteStopRepository routeStopRepository;
     protected RedisTemplate<String, Object> redisTemplate;
     
+    // Intensively cache route stops locally within the strategy to ensure sub-5ms performance
+    private static final java.util.Map<String, List<RouteStop>> localRouteStopsCache = new java.util.concurrent.ConcurrentHashMap<>();
+    
     public void setRouteStopRepository(RouteStopRepository routeStopRepository) {
         this.routeStopRepository = routeStopRepository;
     }
@@ -108,16 +111,29 @@ public abstract class BusCompanyRoutingStrategy {
      * Get total number of stops in a given direction for a route
      */
     protected int getTotalStopsInDirection(Route route, String direction) {
-        if (route == null || routeStopRepository == null) return 0;
-        try {
-            List<RouteStop> stops = routeStopRepository
-                .findByRouteIdAndDirectionOrderByBusStopIndex(route.getId(), direction);
-            return stops.size();
-        } catch (Exception e) {
-            logger.error("Error getting total stops for route {} direction {}: {}", 
-                route.getId(), direction, e.getMessage());
-            return 0;
-        }
+        if (route == null) return 0;
+        List<RouteStop> stops = getRouteStopsCached(route.getId(), direction);
+        return stops.size();
+    }
+    
+    private List<RouteStop> getRouteStopsCached(Long routeId, String direction) {
+        String cacheKey = routeId + "_" + direction;
+        return localRouteStopsCache.computeIfAbsent(cacheKey, k -> {
+            if (routeStopRepository == null) {
+                logger.warn("RouteStopRepository is null in strategy - cannot load stops");
+                return new java.util.ArrayList<>();
+            }
+            try {
+                long start = System.currentTimeMillis();
+                List<RouteStop> stops = routeStopRepository.findByRouteIdAndDirectionOrderByBusStopIndex(routeId, direction);
+                logger.info("[STRATEGY-CACHE] Loaded {} stops for route {} {} from DB in {}ms", 
+                    stops.size(), routeId, direction, (System.currentTimeMillis() - start));
+                return stops;
+            } catch (Exception e) {
+                logger.error("Error loading stops for strategy cache: {}", e.getMessage());
+                return new java.util.ArrayList<>();
+            }
+        });
     }
     
     /**
@@ -136,30 +152,18 @@ public abstract class BusCompanyRoutingStrategy {
      * Find the first stop of a route in a given direction
      */
     protected RouteStop getFirstStop(Route route, String direction) {
-        if (route == null || routeStopRepository == null) return null;
-        try {
-            List<RouteStop> stops = routeStopRepository
-                .findByRouteIdAndDirectionOrderByBusStopIndex(route.getId(), direction);
-            return stops.isEmpty() ? null : stops.get(0);
-        } catch (Exception e) {
-            logger.error("Error getting first stop: {}", e.getMessage());
-            return null;
-        }
+        if (route == null) return null;
+        List<RouteStop> stops = getRouteStopsCached(route.getId(), direction);
+        return stops.isEmpty() ? null : stops.get(0);
     }
     
     /**
      * Find the last stop of a route in a given direction
      */
     protected RouteStop getLastStop(Route route, String direction) {
-        if (route == null || routeStopRepository == null) return null;
-        try {
-            List<RouteStop> stops = routeStopRepository
-                .findByRouteIdAndDirectionOrderByBusStopIndex(route.getId(), direction);
-            return stops.isEmpty() ? null : stops.get(stops.size() - 1);
-        } catch (Exception e) {
-            logger.error("Error getting last stop: {}", e.getMessage());
-            return null;
-        }
+        if (route == null) return null;
+        List<RouteStop> stops = getRouteStopsCached(route.getId(), direction);
+        return stops.isEmpty() ? null : stops.get(stops.size() - 1);
     }
     
     /**

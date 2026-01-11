@@ -28,12 +28,15 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import org.springframework.scheduling.annotation.Async;
+import org.springframework.cache.annotation.Cacheable;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
 import org.slf4j.Logger;
@@ -43,6 +46,9 @@ import org.slf4j.LoggerFactory;
 public class BusTrackingService {
     @Autowired
     private BusRepository busRepository;
+    @Autowired
+    private BusPersistenceService busPersistenceService;
+    
     @Autowired
     private BusLocationRepository busLocationRepository;
     @Autowired
@@ -72,6 +78,8 @@ public class BusTrackingService {
 
     // In-memory cache: company_busNumber -> list of stops
     private static final Map<String, List<BusStop>> routeStopsCache = new HashMap<>();
+    private static final Map<String, Route> routeCache = new ConcurrentHashMap<>();
+    private static final Map<String, List<Route>> routesByBusCache = new ConcurrentHashMap<>();
     private static final double STOP_PROXIMITY_METERS = 30.0;
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -187,7 +195,8 @@ public class BusTrackingService {
                     long timeDiff = Math.abs(currentTs - lastTs);
                     
                     if (timeDiff < 100) {
-                        logger.warn("[DEDUPE] Skipping duplicate payload for IMEI {} within 100ms", payload.getTrackerImei());
+                        logger.warn("[DEDUPE] Skipping payload for IMEI {} - timeDiff: {}ms (threshold: 100ms). Last TS: {}, Current TS: {}", 
+                            payload.getTrackerImei(), timeDiff, last.getTimestamp(), payload.getTimestamp());
                         return;
                     }
                 } catch (Exception e) {
@@ -304,13 +313,20 @@ public class BusTrackingService {
                 // Get the route for this bus (if multiple routes exist, pick one matching current direction if available)
                 Route route = null;
                 try {
-                    if (payload.getTripDirection() != null) {
-                        route = routeRepository.findByBusNumberAndDirection(busNumber, payload.getTripDirection()).orElse(null);
-                    }
+                    String routeKey = busNumber + "_" + (payload.getTripDirection() != null ? payload.getTripDirection() : "any");
+                    route = routeCache.get(routeKey);
+                    
                     if (route == null) {
-                        java.util.List<Route> routes = routeRepository.findByBusNumber(busNumber);
-                        if (!routes.isEmpty()) {
-                            route = routes.get(0);
+                        if (payload.getTripDirection() != null) {
+                            route = routeRepository.findByBusNumberAndDirection(busNumber, payload.getTripDirection()).orElse(null);
+                            if (route != null) routeCache.put(routeKey, route);
+                        }
+                        if (route == null) {
+                            List<Route> routes = routesByBusCache.computeIfAbsent(busNumber, k -> routeRepository.findByBusNumber(busNumber));
+                            if (!routes.isEmpty()) {
+                                route = routes.get(0);
+                                routeCache.put(routeKey, route);
+                            }
                         }
                     }
                 } catch (Exception e) {
@@ -390,18 +406,14 @@ public class BusTrackingService {
             checkAndSwitchRouteAtEnd(payload);
         }
 
+        // Save to Redis and Geo
         redisTemplate.opsForValue().set(redisKey, payload, 24, TimeUnit.HOURS);
         redisTemplate.opsForGeo().add(BUS_GEO_KEY, new RedisGeoCommands.GeoLocation<>(
             payload.getBusId(), new org.springframework.data.geo.Point(payload.getLon(), payload.getLat())));
 
-        // Always stamp the payload before saving so DB rows have a fresh lastSavedTimestamp
-        payload.setLastSavedTimestamp(Instant.now().toEpochMilli());
-
-        // Persist every payload so /buses/active can read recent positions from the database
-        busLocationRepository.save(payload);
-        logger.info("Bus info updated: {}", payload);
-        redisTemplate.opsForValue().set(redisKey, payload, 24, TimeUnit.HOURS);
-
+        // Persist to database asynchronously
+        busPersistenceService.saveLocationAsync(payload);
+        
         streamingService.broadcastBusUpdate(payload);
     }
 

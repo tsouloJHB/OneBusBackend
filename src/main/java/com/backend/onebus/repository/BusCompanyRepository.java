@@ -1,6 +1,7 @@
 package com.backend.onebus.repository;
 
 import com.backend.onebus.model.BusCompany;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -25,6 +26,7 @@ public interface BusCompanyRepository extends JpaRepository<BusCompany, Long> {
     /**
      * Find bus company by name (case insensitive)
      */
+    @Cacheable(value = "companies", key = "#name", unless = "#result == null")
     Optional<BusCompany> findByNameIgnoreCase(String name);
     
     /**

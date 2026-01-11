@@ -7,7 +7,9 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 @Entity
 @Table(name = "route_stops")
 @Data
-public class RouteStop {
+public class RouteStop implements java.io.Serializable {
+    private static final long serialVersionUID = 1L;
+    
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;

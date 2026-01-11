@@ -188,7 +188,12 @@ public class BusStreamingService {
      */
     public void broadcastBusUpdate(BusLocation location) {
         long startTime = System.currentTimeMillis();
+        String imei = location.getTrackerImei();
+        String payloadTs = location.getTimestamp();
         int totalSubscribers = 0;
+        
+        logger.info("[BROADCAST-START] [IMEI:{}] Starting broadcast for payload with timestamp: {}", 
+            imei, payloadTs);
         
         if (location.getBusId() == null) {
             logger.warn("Cannot broadcast: busId is null");
@@ -234,6 +239,7 @@ public class BusStreamingService {
                         .orElse(null);
                     
                     if (route != null) {
+                        long distStart = System.currentTimeMillis();
                         RouteGeometryService.RouteDistanceResult distanceResult = 
                             routeGeometryService.calculateRouteDistance(
                                 location.getLat(),
@@ -243,13 +249,14 @@ public class BusStreamingService {
                                 route.getId(),
                                 clientSub.getDirection()
                             );
+                        long distEnd = System.currentTimeMillis();
                         
                         if (distanceResult != null) {
                             enhancedLocation.put("distanceMeters", distanceResult.distanceMeters);
                             enhancedLocation.put("distanceKm", distanceResult.distanceKm);
                             enhancedLocation.put("estimatedTimeMinutes", distanceResult.estimatedTimeMinutes);
-                            logger.debug("Calculated route distance for {}: {} km, ETA: {} min", 
-                                        clientSub.getSessionId(), distanceResult.distanceKm, distanceResult.estimatedTimeMinutes);
+                            logger.debug("[DISTANCE] Calculated in {}ms for session:{}", 
+                                (distEnd - distStart), clientSub.getSessionId());
                         }
                     }
                 } catch (Exception e) {
@@ -257,12 +264,12 @@ public class BusStreamingService {
                     // Continue without distance - client can fall back to straight-line calculation
                 }
                 
-                logger.info("SHADOW BUS: Broadcasting {} data for bus {} to requested topic {} (session: {})", 
-                           isFallback ? "FALLBACK" : "DIRECT", location.getBusId(), requestedTopic, clientSub.getSessionId());
-                
                 // Send to the requested route topic, not the bus ID topic
                 messagingTemplate.convertAndSend(requestedTopic, enhancedLocation);
                 totalSubscribers++;
+                
+                logger.debug("[SHADOW-BROADCAST] [IMEI:{}] Sent to session:{}, topic:{}", 
+                    imei, clientSub.getSessionId(), requestedTopic);
             }
         }
         
@@ -328,7 +335,12 @@ public class BusStreamingService {
         }
         
         // Record broadcast metrics
-        long broadcastTime = System.currentTimeMillis() - startTime;
+        long endTime = System.currentTimeMillis();
+        long broadcastTime = endTime - startTime;
+        
+        logger.info("[BROADCAST-DONE] [IMEI:{}] Completed broadcast to {} total sub-channels in {}ms. System time: {}", 
+            imei, totalSubscribers, broadcastTime, endTime);
+            
         metricsService.recordWebSocketBroadcast(location.getBusId(), totalSubscribers, broadcastTime);
     }
 

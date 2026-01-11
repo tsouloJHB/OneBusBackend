@@ -1,12 +1,14 @@
 package com.backend.onebus.repository;
 
 import com.backend.onebus.model.Bus;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import java.util.List;
 
 public interface BusRepository extends JpaRepository<Bus, String> {
+    @Cacheable(value = "buses", key = "#trackerImei", unless = "#result == null")
     @Query("SELECT b FROM Bus b LEFT JOIN FETCH b.busCompany WHERE b.trackerImei = :trackerImei")
     Bus findByTrackerImei(@Param("trackerImei") String trackerImei);
     

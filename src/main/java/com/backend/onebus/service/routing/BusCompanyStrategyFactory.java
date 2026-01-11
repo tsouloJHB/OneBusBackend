@@ -24,6 +24,8 @@ public class BusCompanyStrategyFactory {
     @Autowired
     private RedisTemplate<String, Object> redisTemplate;
     
+    private final java.util.Map<String, BusCompanyRoutingStrategy> strategyCache = new java.util.concurrent.ConcurrentHashMap<>();
+    
     /**
      * Get the routing strategy for a bus company.
      * 
@@ -31,27 +33,31 @@ public class BusCompanyStrategyFactory {
      * @return The routing strategy for this company
      */
     public BusCompanyRoutingStrategy getStrategy(String companyName) {
-        BusCompanyRoutingStrategy strategy = null;
+        String key = companyName != null ? companyName.toLowerCase() : "default";
         
-        if (companyName != null) {
-            if (companyName.equalsIgnoreCase("Rea Vaya")) {
-                strategy = new ReaVayaRoutingStrategy();
-            } else if (companyName.equalsIgnoreCase("Metro Bus")) {
-                strategy = new MetroBusRoutingStrategy();
+        return strategyCache.computeIfAbsent(key, k -> {
+            BusCompanyRoutingStrategy strategy = null;
+            
+            if (companyName != null) {
+                if (companyName.equalsIgnoreCase("Rea Vaya")) {
+                    strategy = new ReaVayaRoutingStrategy();
+                    logger.debug("Created new ReaVayaRoutingStrategy");
+                } else if (companyName.equalsIgnoreCase("Metro Bus")) {
+                    strategy = new MetroBusRoutingStrategy();
+                    logger.debug("Created new MetroBusRoutingStrategy");
+                }
             }
-        }
-        
-        // Default to DefaultRoutingStrategy if no company-specific strategy found
-        if (strategy == null) {
-            logger.debug("No specific strategy for company '{}', using default", companyName);
-            strategy = new DefaultRoutingStrategy();
-        }
-        
-        // Set the repository and Redis template on the strategy
-        strategy.setRouteStopRepository(routeStopRepository);
-        strategy.setRedisTemplate(redisTemplate);
-        
-        logger.debug("Using {} strategy for company: {}", strategy.getClass().getSimpleName(), companyName);
-        return strategy;
+            
+            if (strategy == null) {
+                logger.debug("No specific strategy for company '{}', creating default", companyName);
+                strategy = new DefaultRoutingStrategy();
+            }
+            
+            // Set the repository and Redis template on the strategy
+            strategy.setRouteStopRepository(routeStopRepository);
+            strategy.setRedisTemplate(redisTemplate);
+            
+            return strategy;
+        });
     }
 }

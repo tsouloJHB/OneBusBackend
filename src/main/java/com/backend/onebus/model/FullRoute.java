@@ -9,7 +9,9 @@ import java.time.LocalDateTime;
 @Table(name = "full_routes")
 @Getter
 @Setter
-public class FullRoute {
+public class FullRoute implements java.io.Serializable {
+    private static final long serialVersionUID = 1L;
+    
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;

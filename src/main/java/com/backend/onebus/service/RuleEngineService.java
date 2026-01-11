@@ -12,6 +12,7 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -74,6 +75,7 @@ public class RuleEngineService {
         return isEnabled(companyId, RuleConstants.CIRCULAR_ROUTE_MODE);
     }
 
+    @Cacheable(value = "companies", key = "#companyName", unless = "#result == null")
     public Optional<Long> resolveCompanyIdByName(String companyName) {
         return busCompanyRepository.findByNameIgnoreCase(companyName).map(company -> {
             Long id = company.getId();

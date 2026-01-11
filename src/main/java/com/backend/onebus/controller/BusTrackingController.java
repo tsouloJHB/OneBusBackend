@@ -87,14 +87,23 @@ public class BusTrackingController {
     })
     public ResponseEntity<?> receiveTrackerPayload(@RequestBody BusLocation payload) {
         long startTime = System.currentTimeMillis();
-        logger.info("Received tracker payload: {}", payload);
+        String imei = payload.getTrackerImei();
+        String ts = payload.getTimestamp();
+        
+        logger.info("[RECEPTION] [IMEI:{}] Received payload with timestamp: {} at system time: {}", 
+            imei, ts, startTime);
         
         // Record metrics
-        metricsService.recordTrackerPayloadReceived(payload.getBusId(), payload.getTrackerImei());
+        metricsService.recordTrackerPayloadReceived(payload.getBusId(), imei);
         
         trackingService.processTrackerPayload(payload);
         
-        long processingTime = System.currentTimeMillis() - startTime;
+        long endTime = System.currentTimeMillis();
+        long processingTime = endTime - startTime;
+        
+        logger.info("[RECEPTION-DONE] [IMEI:{}] Processed payload in {}ms. Total system time: {}", 
+            imei, processingTime, endTime);
+            
         metricsService.recordBusLocationProcessed(payload.getBusId(), processingTime);
         
         return ResponseEntity.ok().build();

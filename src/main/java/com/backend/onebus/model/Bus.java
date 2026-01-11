@@ -8,7 +8,9 @@ import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "buses")
-public class Bus {
+public class Bus implements java.io.Serializable {
+    private static final long serialVersionUID = 1L;
+    
     @Id
     private String busId;
     
