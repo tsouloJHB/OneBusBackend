@@ -41,6 +41,25 @@ public class AuthService {
         return registerWithRole(request, UserRole.ADMIN);
     }
 
+    public AuthResponseDTO registerFleetManager(RegisterRequestDTO request) {
+        if (request.getCompanyId() == null) {
+            throw new IllegalArgumentException("Company ID is required for fleet manager");
+        }
+        
+        // Find company to get name for password generation
+        com.backend.onebus.model.BusCompany company = busCompanyRepository.findById(request.getCompanyId())
+                .orElseThrow(() -> new IllegalArgumentException("Company not found"));
+                
+        // Auto-generate password: [CompanyName]onebus#[Year]
+        String cleanCompanyName = company.getName().replaceAll("\\s+", "");
+        int year = java.time.Year.now().getValue();
+        String autoPassword = String.format("%sonebus#%d", cleanCompanyName, year);
+        
+        request.setPassword(autoPassword);
+        
+        return registerWithRole(request, UserRole.FLEET_MANAGER);
+    }
+
     public AuthResponseDTO registerCompanyAdmin(RegisterRequestDTO request) {
         if (request.getCompanyId() == null) {
             throw new IllegalArgumentException("Company ID is required for company admin");
@@ -57,7 +76,7 @@ public class AuthService {
         
         request.setPassword(autoPassword);
         
-        return registerWithRole(request, UserRole.COMPANY_ADMIN);
+        return registerWithRole(request, UserRole.FLEET_MANAGER); // Changed from COMPANY_ADMIN to FLEET_MANAGER
     }
 
     public AuthResponseDTO login(LoginRequestDTO request) {

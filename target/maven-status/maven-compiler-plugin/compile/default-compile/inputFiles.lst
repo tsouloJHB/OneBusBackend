@@ -70,6 +70,9 @@
 /Users/thabangsoulo/personalspace/OneBusapplications/OneBusBackend/src/main/java/com/backend/onebus/repository/RouteStopRepository.java
 /Users/thabangsoulo/personalspace/OneBusapplications/OneBusBackend/src/main/java/com/backend/onebus/repository/TrackerRepository.java
 /Users/thabangsoulo/personalspace/OneBusapplications/OneBusBackend/src/main/java/com/backend/onebus/repository/UserRepository.java
+/Users/thabangsoulo/personalspace/OneBusapplications/OneBusBackend/src/main/java/com/backend/onebus/security/JwtAuthorizationFilter.java
+/Users/thabangsoulo/personalspace/OneBusapplications/OneBusBackend/src/main/java/com/backend/onebus/security/RoleBasedAccessControl.java
+/Users/thabangsoulo/personalspace/OneBusapplications/OneBusBackend/src/main/java/com/backend/onebus/security/RoleBasedAccessControlAspect.java
 /Users/thabangsoulo/personalspace/OneBusapplications/OneBusBackend/src/main/java/com/backend/onebus/service/AuthService.java
 /Users/thabangsoulo/personalspace/OneBusapplications/OneBusBackend/src/main/java/com/backend/onebus/service/BusCompanyService.java
 /Users/thabangsoulo/personalspace/OneBusapplications/OneBusBackend/src/main/java/com/backend/onebus/service/BusNumberService.java

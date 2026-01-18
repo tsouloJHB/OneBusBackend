@@ -3,6 +3,7 @@ package com.backend.onebus.controller;
 import com.backend.onebus.dto.BusCompanyCreateDTO;
 import com.backend.onebus.dto.BusCompanyResponseDTO;
 import com.backend.onebus.dto.UserUpdateDTO;
+import com.backend.onebus.security.RoleBasedAccessControl;
 import com.backend.onebus.service.BusCompanyService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -31,6 +32,7 @@ public class BusCompanyController {
     private BusCompanyService busCompanyService;
     
     @PostMapping
+    @RoleBasedAccessControl(allowedRoles = {"ADMIN"})
     @Operation(
         summary = "Create a new bus company",
         description = "Creates a new bus company with the provided details. Registration number and company code must be unique."
@@ -58,6 +60,7 @@ public class BusCompanyController {
     }
     
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @RoleBasedAccessControl(allowedRoles = {"ADMIN"})
     @Operation(
         summary = "Create a new bus company with image",
         description = "Creates a new bus company with the provided details and an optional image file. Registration number and company code must be unique."
@@ -259,6 +262,7 @@ public class BusCompanyController {
     }
     
     @PutMapping("/{id}")
+    @RoleBasedAccessControl(allowedRoles = {"ADMIN"})
     @Operation(
         summary = "Update bus company",
         description = "Updates an existing bus company with the provided details."
@@ -290,6 +294,7 @@ public class BusCompanyController {
     }
     
     @PutMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @RoleBasedAccessControl(allowedRoles = {"ADMIN"})
     @Operation(
         summary = "Update bus company with image",
         description = "Updates an existing bus company with the provided details and an optional new image file."
@@ -342,6 +347,7 @@ public class BusCompanyController {
     }
     
     @PatchMapping("/{id}/deactivate")
+    @RoleBasedAccessControl(allowedRoles = {"ADMIN"})
     @Operation(
         summary = "Deactivate bus company",
         description = "Deactivates a bus company, making it inactive in the system."
@@ -368,6 +374,7 @@ public class BusCompanyController {
     }
     
     @PatchMapping("/{id}/activate")
+    @RoleBasedAccessControl(allowedRoles = {"ADMIN"})
     @Operation(
         summary = "Activate bus company",
         description = "Activates a bus company, making it active in the system."
@@ -394,6 +401,7 @@ public class BusCompanyController {
     }
     
     @DeleteMapping("/{id}/image")
+    @RoleBasedAccessControl(allowedRoles = {"ADMIN"})
     @Operation(
         summary = "Delete bus company image",
         description = "Deletes the image associated with a bus company."
@@ -420,6 +428,7 @@ public class BusCompanyController {
     }
 
     @DeleteMapping("/{id}")
+    @RoleBasedAccessControl(allowedRoles = {"ADMIN"})
     @Operation(
         summary = "Delete bus company",
         description = "Permanently deletes a bus company from the system."

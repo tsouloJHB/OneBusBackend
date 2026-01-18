@@ -78,8 +78,20 @@ public class BusNumberController {
         @ApiResponse(responseCode = "500", description = "Internal server error",
                 content = @Content(mediaType = "application/json"))
     })
-    public ResponseEntity<List<BusNumberResponseDTO>> getAllBusNumbers() {
-        List<BusNumberResponseDTO> busNumbers = busNumberService.getAllBusNumbers();
+    public ResponseEntity<List<BusNumberResponseDTO>> getAllBusNumbers(jakarta.servlet.http.HttpServletRequest request) {
+        // Get user role and company ID from JWT token
+        String userRole = (String) request.getAttribute("userRole");
+        Long userCompanyId = (Long) request.getAttribute("userCompanyId");
+        
+        List<BusNumberResponseDTO> busNumbers;
+        
+        // Fleet managers can only see their company's buses
+        if ("FLEET_MANAGER".equals(userRole) && userCompanyId != null) {
+            busNumbers = busNumberService.getBusNumbersByCompany(userCompanyId);
+        } else {
+            busNumbers = busNumberService.getAllBusNumbers();
+        }
+        
         return ResponseEntity.ok(busNumbers);
     }
     
@@ -94,8 +106,20 @@ public class BusNumberController {
         @ApiResponse(responseCode = "500", description = "Internal server error",
                 content = @Content(mediaType = "application/json"))
     })
-    public ResponseEntity<List<BusNumberResponseDTO>> getActiveBusNumbers() {
-        List<BusNumberResponseDTO> busNumbers = busNumberService.getActiveBusNumbers();
+    public ResponseEntity<List<BusNumberResponseDTO>> getActiveBusNumbers(jakarta.servlet.http.HttpServletRequest request) {
+        // Get user role and company ID from JWT token
+        String userRole = (String) request.getAttribute("userRole");
+        Long userCompanyId = (Long) request.getAttribute("userCompanyId");
+        
+        List<BusNumberResponseDTO> busNumbers;
+        
+        // Fleet managers can only see their company's active buses
+        if ("FLEET_MANAGER".equals(userRole) && userCompanyId != null) {
+            busNumbers = busNumberService.getActiveBusNumbersByCompany(userCompanyId);
+        } else {
+            busNumbers = busNumberService.getActiveBusNumbers();
+        }
+        
         return ResponseEntity.ok(busNumbers);
     }
     

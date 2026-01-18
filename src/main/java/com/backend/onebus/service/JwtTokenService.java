@@ -39,6 +39,7 @@ public class JwtTokenService {
                 .setSubject(user.getEmail())
                 .claim("role", user.getRole().name())
                 .claim("name", user.getFullName())
+                .claim("companyId", user.getCompanyId())
                 .setIssuedAt(Date.from(now))
                 .setExpiration(Date.from(expiry))
                 .signWith(secretKey, SignatureAlgorithm.HS256)
@@ -88,6 +89,14 @@ public class JwtTokenService {
      */
     public String getNameFromToken(String token) {
         return parseToken(token).get("name", String.class);
+    }
+
+    /**
+     * Extract company ID from token
+     */
+    public Long getCompanyIdFromToken(String token) {
+        Integer companyId = parseToken(token).get("companyId", Integer.class);
+        return companyId != null ? companyId.longValue() : null;
     }
 
     public Instant getExpiryInstant() {

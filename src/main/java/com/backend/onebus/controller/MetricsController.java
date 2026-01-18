@@ -1,5 +1,6 @@
 package com.backend.onebus.controller;
 
+import com.backend.onebus.security.RoleBasedAccessControl;
 import com.backend.onebus.service.MetricsService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -14,6 +15,7 @@ import java.util.List;
 @RequestMapping("/api/metrics")
 @CrossOrigin(origins = "*")
 @Tag(name = "Metrics", description = "Real-time performance monitoring and metrics")
+@RoleBasedAccessControl(allowedRoles = {"ADMIN"})
 public class MetricsController {
     
     @Autowired

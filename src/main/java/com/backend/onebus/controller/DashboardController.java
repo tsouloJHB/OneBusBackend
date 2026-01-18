@@ -1,10 +1,13 @@
 package com.backend.onebus.controller;
 
 import com.backend.onebus.model.DashboardStats;
+import com.backend.onebus.model.User;
+import com.backend.onebus.repository.UserRepository;
 import com.backend.onebus.service.DashboardStatsService;
 import com.backend.onebus.service.BusTrackingService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -24,14 +27,33 @@ public class DashboardController {
     @Autowired
     private BusTrackingService busTrackingService;
 
+    @Autowired
+    private UserRepository userRepository;
+
     /**
      * Get dashboard statistics
      * Returns pre-calculated counts for quick dashboard loading
+     * For fleet managers, only returns data for their company
      */
     @GetMapping("/stats")
     @Operation(summary = "Get dashboard statistics", 
                description = "Returns optimized dashboard statistics including total counts and percentage changes")
-    public ResponseEntity<Map<String, Object>> getDashboardStats(@RequestParam(required = false) Long companyId) {
+    public ResponseEntity<Map<String, Object>> getDashboardStats(
+            @RequestParam(required = false) Long companyId,
+            HttpServletRequest request) {
+        
+        // Get user info from request attributes (set by JWT filter)
+        String userEmail = (String) request.getAttribute("userEmail");
+        String userRole = (String) request.getAttribute("userRole");
+        
+        // If user is fleet manager, override companyId with their company
+        if ("FLEET_MANAGER".equals(userRole) && userEmail != null) {
+            User user = userRepository.findByEmail(userEmail).orElse(null);
+            if (user != null && user.getCompanyId() != null) {
+                companyId = user.getCompanyId();
+            }
+        }
+        
         Map<String, Object> stats = dashboardStatsService.getStatsMap(companyId);
         
         // Add active buses count (from in-memory cache, not DB)
@@ -76,8 +98,8 @@ public class DashboardController {
     public ResponseEntity<Map<String, Object>> getDetailedStats() {
         Map<String, Object> detailedStats = new HashMap<>();
         
-        // Get base stats
-        Map<String, Object> baseStats = dashboardStatsService.getStatsMap();
+        // Get base stats (null = all companies for admin)
+        Map<String, Object> baseStats = dashboardStatsService.getStatsMap(null);
         detailedStats.putAll(baseStats);
         
         // Add active buses info

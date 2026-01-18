@@ -2,6 +2,7 @@ package com.backend.onebus.controller;
 
 import com.backend.onebus.dto.TrackerDTO;
 import com.backend.onebus.model.Tracker;
+import com.backend.onebus.security.RoleBasedAccessControl;
 import com.backend.onebus.service.TrackerService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,6 +16,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/trackers")
 @CrossOrigin(origins = "*")
+@RoleBasedAccessControl(allowedRoles = {"ADMIN"})
 public class TrackerController {
 
     @Autowired
