@@ -39,6 +39,8 @@
 /Users/thabangsoulo/personalspace/OneBusapplications/OneBusBackend/src/main/java/com/backend/onebus/dto/RouteStopUpdateDTO.java
 /Users/thabangsoulo/personalspace/OneBusapplications/OneBusBackend/src/main/java/com/backend/onebus/dto/RouteUpdateDTO.java
 /Users/thabangsoulo/personalspace/OneBusapplications/OneBusBackend/src/main/java/com/backend/onebus/dto/TrackerDTO.java
+/Users/thabangsoulo/personalspace/OneBusapplications/OneBusBackend/src/main/java/com/backend/onebus/dto/UserResponseDTO.java
+/Users/thabangsoulo/personalspace/OneBusapplications/OneBusBackend/src/main/java/com/backend/onebus/dto/UserUpdateDTO.java
 /Users/thabangsoulo/personalspace/OneBusapplications/OneBusBackend/src/main/java/com/backend/onebus/event/WebSocketEventListener.java
 /Users/thabangsoulo/personalspace/OneBusapplications/OneBusBackend/src/main/java/com/backend/onebus/model/Bus.java
 /Users/thabangsoulo/personalspace/OneBusapplications/OneBusBackend/src/main/java/com/backend/onebus/model/BusCompany.java

@@ -47,15 +47,18 @@ class BusSelectionServiceTest {
     }
 
     @Test
-    void testBusInRequestedDirectionAheadOfClient() {
-        BusLocation bus1 = createBus("bus1", "Northbound", 5);
-        BusLocation bus2 = createBus("bus2", "Northbound", 7);
+    void testBusInRequestedDirectionApproachingClient() {
+        // Bus at index 3 is approaching client at index 4 (BEHIND client)
+        BusLocation bus1 = createBus("bus1", "Northbound", 3);
+        BusLocation bus2 = createBus("bus2", "Northbound", 1);
         Set<String> keys = new HashSet<>(Arrays.asList("bus:location:bus1", "bus:location:bus2"));
         when(redisTemplate.keys(anyString())).thenReturn(keys);
         when(valueOperations.get("bus:location:bus1")).thenReturn(bus1);
         when(valueOperations.get("bus:location:bus2")).thenReturn(bus2);
+        
+        // Client at index 4
         String result = busSelectionService.selectBestBusForClient("C6", "Northbound", 0, 0, 4);
-        assertEquals("bus1", result, "Should assign the next bus ahead of client");
+        assertEquals("bus1", result, "Should assign the closest approaching bus (index 3 closest to 4)");
     }
 
     @Test
@@ -98,5 +101,23 @@ class BusSelectionServiceTest {
         when(valueOperations.get("bus:location:bus2")).thenReturn(bus2);
         String result = busSelectionService.selectBestBusForClient("C6", "Northbound", 0, 0, 5);
         assertEquals("bus1", result, "Should select closest bus in opposite direction");
+    }
+
+    @Test
+    void testNoFallbackIfBusInRequestedDirectionPassed() {
+        // Bus in requested direction exists but has passed (index 7 > client index 6)
+        BusLocation busRequested = createBus("busRequested", "Northbound", 7);
+        // Bus in opposite direction exists (would normally be selected as fallback)
+        BusLocation busOpposite = createBus("busOpposite", "Southbound", 5);
+        
+        Set<String> keys = new HashSet<>(Arrays.asList("bus:location:busRequested", "bus:location:busOpposite"));
+        when(redisTemplate.keys(anyString())).thenReturn(keys);
+        when(valueOperations.get("bus:location:busRequested")).thenReturn(busRequested);
+        when(valueOperations.get("bus:location:busOpposite")).thenReturn(busOpposite);
+        
+        // Client is at index 6 in Northbound
+        String result = busSelectionService.selectBestBusForClient("C6", "Northbound", 0, 0, 6);
+        
+        assertNull(result, "Should return null (not fall back) because a bus exists in the requested direction, even though it passed");
     }
 } 

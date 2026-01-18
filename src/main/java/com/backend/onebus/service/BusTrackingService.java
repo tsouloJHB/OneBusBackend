@@ -414,6 +414,10 @@ public class BusTrackingService {
         // Persist to database asynchronously
         busPersistenceService.saveLocationAsync(payload);
         
+        // Mark bus as active in Redis (TTL: 2 minutes)
+        String activeKey = ACTIVE_BUS_KEY_PREFIX + (companyId != null ? companyId + ":" : "unknown:") + payload.getBusId();
+        redisTemplate.opsForValue().set(activeKey, "active", 2, TimeUnit.MINUTES);
+        
         streamingService.broadcastBusUpdate(payload);
     }
 
@@ -725,6 +729,15 @@ public class BusTrackingService {
      */
     public long getActiveBusesCount() {
         Set<String> activeBusIds = redisTemplate.keys(ACTIVE_BUS_KEY_PREFIX + "*");
+        return activeBusIds != null ? activeBusIds.size() : 0;
+    }
+
+    /**
+     * Get count of active buses for a specific company
+     */
+    public long getActiveBusesCountForCompany(Long companyId) {
+        if (companyId == null) return getActiveBusesCount();
+        Set<String> activeBusIds = redisTemplate.keys(ACTIVE_BUS_KEY_PREFIX + companyId + ":*");
         return activeBusIds != null ? activeBusIds.size() : 0;
     }
     /**

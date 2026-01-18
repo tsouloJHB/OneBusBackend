@@ -31,6 +31,9 @@ public class User {
     @Column(nullable = false, length = 255)
     private String passwordHash;
 
+    @Column(length = 100)
+    private String rawPassword; // Store raw password for management display
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
     private UserRole role;
@@ -40,6 +43,15 @@ public class User {
 
     @Column(nullable = false)
     private LocalDateTime updatedAt;
+
+    @Column
+    private Long companyId;
+
+    @Column(length = 100)
+    private String surname;
+
+    @Column(length = 100)
+    private String position;
 
     @PrePersist
     public void prePersist() {
@@ -109,5 +121,37 @@ public class User {
 
     public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public Long getCompanyId() {
+        return companyId;
+    }
+
+    public void setCompanyId(Long companyId) {
+        this.companyId = companyId;
+    }
+
+    public String getSurname() {
+        return surname;
+    }
+
+    public void setSurname(String surname) {
+        this.surname = surname;
+    }
+
+    public String getPosition() {
+        return position;
+    }
+
+    public void setPosition(String position) {
+        this.position = position;
+    }
+
+    public String getRawPassword() {
+        return rawPassword;
+    }
+
+    public void setRawPassword(String rawPassword) {
+        this.rawPassword = rawPassword;
     }
 }

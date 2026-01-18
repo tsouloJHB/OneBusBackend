@@ -24,8 +24,8 @@ public class TrackerController {
      * Get all trackers
      */
     @GetMapping
-    public ResponseEntity<List<TrackerDTO>> getAllTrackers() {
-        return ResponseEntity.ok(trackerService.getAllTrackers());
+    public ResponseEntity<List<TrackerDTO>> getAllTrackers(@RequestParam(required = false) Long companyId) {
+        return ResponseEntity.ok(trackerService.getAllTrackers(companyId));
     }
 
     /**
@@ -80,8 +80,8 @@ public class TrackerController {
      * Search trackers
      */
     @GetMapping("/search")
-    public ResponseEntity<List<TrackerDTO>> searchTrackers(@RequestParam String q) {
-        return ResponseEntity.ok(trackerService.searchTrackers(q));
+    public ResponseEntity<List<TrackerDTO>> searchTrackers(@RequestParam String q, @RequestParam(required = false) Long companyId) {
+        return ResponseEntity.ok(trackerService.searchTrackers(q, companyId));
     }
 
     /**
@@ -147,7 +147,7 @@ public class TrackerController {
      * Get tracker statistics
      */
     @GetMapping("/statistics")
-    public ResponseEntity<TrackerService.TrackerStatistics> getTrackerStatistics() {
-        return ResponseEntity.ok(trackerService.getTrackerStatistics());
+    public ResponseEntity<TrackerService.TrackerStatistics> getTrackerStatistics(@RequestParam(required = false) Long companyId) {
+        return ResponseEntity.ok(trackerService.getTrackerStatistics(companyId));
     }
 }

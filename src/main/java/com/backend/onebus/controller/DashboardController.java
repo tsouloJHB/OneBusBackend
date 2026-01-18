@@ -31,11 +31,13 @@ public class DashboardController {
     @GetMapping("/stats")
     @Operation(summary = "Get dashboard statistics", 
                description = "Returns optimized dashboard statistics including total counts and percentage changes")
-    public ResponseEntity<Map<String, Object>> getDashboardStats() {
-        Map<String, Object> stats = dashboardStatsService.getStatsMap();
+    public ResponseEntity<Map<String, Object>> getDashboardStats(@RequestParam(required = false) Long companyId) {
+        Map<String, Object> stats = dashboardStatsService.getStatsMap(companyId);
         
         // Add active buses count (from in-memory cache, not DB)
-        long activeBusesCount = busTrackingService.getActiveBusesCount();
+        long activeBusesCount = (companyId != null) ? 
+            busTrackingService.getActiveBusesCountForCompany(companyId) : 
+            busTrackingService.getActiveBusesCount();
         stats.put("activeBuses", activeBusesCount);
         
         return ResponseEntity.ok(stats);

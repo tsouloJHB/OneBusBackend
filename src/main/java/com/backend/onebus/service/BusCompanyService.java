@@ -2,8 +2,13 @@ package com.backend.onebus.service;
 
 import com.backend.onebus.dto.BusCompanyCreateDTO;
 import com.backend.onebus.dto.BusCompanyResponseDTO;
+import com.backend.onebus.dto.UserResponseDTO;
+import com.backend.onebus.dto.UserUpdateDTO;
 import com.backend.onebus.model.BusCompany;
+import com.backend.onebus.model.User;
 import com.backend.onebus.repository.BusCompanyRepository;
+import com.backend.onebus.repository.BusNumberRepository;
+import com.backend.onebus.repository.RegisteredBusRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -24,7 +29,16 @@ public class BusCompanyService {
     private BusCompanyRepository busCompanyRepository;
     
     @Autowired
+    private com.backend.onebus.repository.UserRepository userRepository;
+    
+    @Autowired
     private FileStorageService fileStorageService;
+    
+    @Autowired
+    private BusNumberRepository busNumberRepository;
+    
+    @Autowired
+    private RegisteredBusRepository registeredBusRepository;
     
     /**
      * Create a new bus company
@@ -399,6 +413,103 @@ public class BusCompanyService {
         }
     }
     
+    /**
+     * Get users associated with a specific company
+     */
+    @Transactional(readOnly = true)
+    public List<com.backend.onebus.dto.UserResponseDTO> getCompanyUsers(Long companyId) {
+        if (!busCompanyRepository.existsById(companyId)) {
+            throw new IllegalArgumentException("Bus company not found with ID: " + companyId);
+        }
+        
+        List<com.backend.onebus.model.User> users = userRepository.findByCompanyId(companyId);
+        return users.stream()
+                .map(user -> {
+                    com.backend.onebus.dto.UserResponseDTO dto = new com.backend.onebus.dto.UserResponseDTO();
+                    dto.setId(user.getId());
+                    dto.setEmail(user.getEmail());
+                    dto.setFullName(user.getFullName());
+                    dto.setSurname(user.getSurname());
+                    dto.setPosition(user.getPosition());
+                    dto.setRole(user.getRole());
+                    dto.setCompanyId(user.getCompanyId());
+                    dto.setPassword(user.getRawPassword()); // Include raw password
+                    dto.setCreatedAt(user.getCreatedAt());
+                    return dto;
+                })
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Get bus numbers for a specific company
+     */
+    @Transactional(readOnly = true)
+    public List<com.backend.onebus.dto.BusNumberResponseDTO> getBusNumbersByCompany(String companyId) {
+        Long id = Long.parseLong(companyId);
+        List<com.backend.onebus.model.BusNumber> busNumbers = busNumberRepository.findByBusCompany_Id(id);
+        return busNumbers.stream()
+                .map(this::convertBusNumberToResponseDTO)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Get registered buses for a specific company
+     */
+    @Transactional(readOnly = true)
+    public List<com.backend.onebus.dto.RegisteredBusResponseDTO> getRegisteredBusesByCompany(String companyId) {
+        Long id = Long.parseLong(companyId);
+        List<com.backend.onebus.model.RegisteredBus> registeredBuses = registeredBusRepository.findByCompanyId(id);
+        return registeredBuses.stream()
+                .map(this::convertRegisteredBusToResponseDTO)
+                .collect(Collectors.toList());
+    }
+
+    // New conversion methods
+    private com.backend.onebus.dto.BusNumberResponseDTO convertBusNumberToResponseDTO(com.backend.onebus.model.BusNumber entity) {
+        com.backend.onebus.dto.BusNumberResponseDTO dto = new com.backend.onebus.dto.BusNumberResponseDTO();
+        dto.setId(entity.getId());
+        dto.setBusNumber(entity.getBusNumber());
+        dto.setBusCompanyId(entity.getBusCompany().getId());
+        dto.setCompanyName(entity.getBusCompany().getName());
+        dto.setRouteName(entity.getRouteName());
+        dto.setDescription(entity.getDescription());
+        dto.setStartDestination(entity.getStartDestination());
+        dto.setEndDestination(entity.getEndDestination());
+        dto.setDirection(entity.getDirection());
+        dto.setDistanceKm(entity.getDistanceKm());
+        dto.setEstimatedDurationMinutes(entity.getEstimatedDurationMinutes());
+        dto.setFrequencyMinutes(entity.getFrequencyMinutes());
+        dto.setIsActive(entity.getIsActive());
+        dto.setCreatedAt(entity.getCreatedAt());
+        dto.setUpdatedAt(entity.getUpdatedAt());
+        return dto;
+    }
+
+    private com.backend.onebus.dto.RegisteredBusResponseDTO convertRegisteredBusToResponseDTO(com.backend.onebus.model.RegisteredBus entity) {
+        com.backend.onebus.dto.RegisteredBusResponseDTO dto = new com.backend.onebus.dto.RegisteredBusResponseDTO();
+        dto.setId(entity.getId());
+        dto.setCompanyId(entity.getCompany().getId());
+        dto.setCompanyName(entity.getCompany().getName());
+        dto.setRegistrationNumber(entity.getRegistrationNumber());
+        dto.setBusNumber(entity.getBusNumber());
+        dto.setBusId(entity.getBusId());
+        dto.setTrackerImei(entity.getTrackerImei());
+        dto.setDriverId(entity.getDriverId());
+        dto.setDriverName(entity.getDriverName());
+        dto.setModel(entity.getModel());
+        dto.setYear(entity.getYear());
+        dto.setCapacity(entity.getCapacity());
+        dto.setStatus(entity.getStatus() != null ? entity.getStatus().name() : null);
+        dto.setRouteId(entity.getRouteId());
+        dto.setRouteName(entity.getRouteName());
+        dto.setRouteAssignedAt(entity.getRouteAssignedAt());
+        dto.setLastInspection(entity.getLastInspection());
+        dto.setNextInspection(entity.getNextInspection());
+        dto.setCreatedAt(entity.getCreatedAt());
+        dto.setUpdatedAt(entity.getUpdatedAt());
+        return dto;
+    }
+
     private void updateEntityFromDTOSelective(BusCompany entity, BusCompanyCreateDTO dto) {
         if (dto.getName() != null) entity.setName(dto.getName());
         if (dto.getRegistrationNumber() != null) entity.setRegistrationNumber(dto.getRegistrationNumber());
@@ -410,5 +521,52 @@ public class BusCompanyService {
         if (dto.getPostalCode() != null) entity.setPostalCode(dto.getPostalCode());
         if (dto.getCountry() != null) entity.setCountry(dto.getCountry());
         if (dto.getIsActive() != null) entity.setIsActive(dto.getIsActive());
+    }
+    public void deleteCompanyUser(Long companyId, Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+        
+        if (user.getCompanyId() == null || !user.getCompanyId().equals(companyId)) {
+            throw new IllegalArgumentException("User does not belong to this company");
+        }
+        
+        userRepository.delete(user);
+    }
+
+    public UserResponseDTO updateCompanyUser(Long companyId, Long userId, UserUpdateDTO updateDTO) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+        
+        if (user.getCompanyId() == null || !user.getCompanyId().equals(companyId)) {
+            throw new IllegalArgumentException("User does not belong to this company");
+        }
+        
+        // Check if email is being changed and if it's already taken
+        if (!user.getEmail().equals(updateDTO.getEmail()) && userRepository.existsByEmail(updateDTO.getEmail())) {
+            throw new IllegalArgumentException("Email already taken");
+        }
+        
+        user.setEmail(updateDTO.getEmail());
+        user.setFullName(updateDTO.getFullName());
+        user.setSurname(updateDTO.getSurname());
+        user.setPosition(updateDTO.getPosition());
+        if (updateDTO.getRole() != null) {
+            user.setRole(updateDTO.getRole());
+        }
+        
+        User saved = userRepository.save(user);
+        
+        UserResponseDTO responseDTO = new UserResponseDTO();
+        responseDTO.setId(saved.getId());
+        responseDTO.setEmail(saved.getEmail());
+        responseDTO.setFullName(saved.getFullName());
+        responseDTO.setSurname(saved.getSurname());
+        responseDTO.setPosition(saved.getPosition());
+        responseDTO.setRole(saved.getRole());
+        responseDTO.setCompanyId(saved.getCompanyId());
+        responseDTO.setPassword(saved.getRawPassword());
+        responseDTO.setCreatedAt(saved.getCreatedAt());
+        
+        return responseDTO;
     }
 }

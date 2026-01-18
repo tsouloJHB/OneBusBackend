@@ -85,8 +85,22 @@ public interface TrackerRepository extends JpaRepository<Tracker, Long> {
     long countByStatus(Tracker.TrackerStatus status);
     
     /**
+     * Count trackers by status and company
+     */
+    long countByStatusAndCompanyId(Tracker.TrackerStatus status, Long companyId);
+
+    /**
      * Count available trackers for a company
      */
     @Query("SELECT COUNT(t) FROM Tracker t WHERE t.company.id = :companyId AND t.status = 'AVAILABLE' AND t.assignedBus IS NULL")
     long countAvailableTrackersByCompanyId(@Param("companyId") Long companyId);
+
+    /**
+     * Search trackers within a company
+     */
+    @Query("SELECT t FROM Tracker t WHERE t.company.id = :companyId AND (" +
+           "LOWER(t.imei) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR " +
+           "LOWER(t.brand) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR " +
+           "LOWER(t.model) LIKE LOWER(CONCAT('%', :searchTerm, '%')))")
+    List<Tracker> searchTrackersByCompanyId(@Param("searchTerm") String searchTerm, @Param("companyId") Long companyId);
 }

@@ -31,9 +31,14 @@ public class TrackerService {
     private DashboardStatsService dashboardStatsService;
 
     /**
-     * Get all trackers
+     * Get all trackers, optionally filtered by company
      */
-    public List<TrackerDTO> getAllTrackers() {
+    public List<TrackerDTO> getAllTrackers(Long companyId) {
+        if (companyId != null) {
+            return trackerRepository.findByCompanyId(companyId).stream()
+                    .map(TrackerDTO::new)
+                    .collect(Collectors.toList());
+        }
         return trackerRepository.findAll().stream()
                 .map(TrackerDTO::new)
                 .collect(Collectors.toList());
@@ -94,9 +99,14 @@ public class TrackerService {
     }
 
     /**
-     * Search trackers
+     * Search trackers, optionally within a company
      */
-    public List<TrackerDTO> searchTrackers(String searchTerm) {
+    public List<TrackerDTO> searchTrackers(String searchTerm, Long companyId) {
+        if (companyId != null) {
+            return trackerRepository.searchTrackersByCompanyId(searchTerm, companyId).stream()
+                    .map(TrackerDTO::new)
+                    .collect(Collectors.toList());
+        }
         return trackerRepository.searchTrackers(searchTerm).stream()
                 .map(TrackerDTO::new)
                 .collect(Collectors.toList());
@@ -269,21 +279,32 @@ public class TrackerService {
                 System.err.println("Failed to migrate tracker for bus " + bus.getBusNumber() + ": " + e.getMessage());
             }
         }
-
         return migratedCount;
     }
 
     /**
-     * Get tracker statistics
+     * Get tracker statistics, optionally for a specific company
      */
-    public TrackerStatistics getTrackerStatistics() {
+    public TrackerStatistics getTrackerStatistics(Long companyId) {
+        if (companyId != null) {
+            long total = trackerRepository.countByCompanyId(companyId);
+            long available = trackerRepository.countByStatusAndCompanyId(Tracker.TrackerStatus.AVAILABLE, companyId);
+            long inUse = trackerRepository.countByStatusAndCompanyId(Tracker.TrackerStatus.IN_USE, companyId);
+            long maintenance = trackerRepository.countByStatusAndCompanyId(Tracker.TrackerStatus.MAINTENANCE, companyId);
+            long damaged = trackerRepository.countByStatusAndCompanyId(Tracker.TrackerStatus.DAMAGED, companyId);
+            long retired = trackerRepository.countByStatusAndCompanyId(Tracker.TrackerStatus.RETIRED, companyId);
+            
+            return new TrackerStatistics(total, available, inUse, maintenance, damaged, retired);
+        }
+
+        // Global stats
         long total = trackerRepository.count();
         long available = trackerRepository.countByStatus(Tracker.TrackerStatus.AVAILABLE);
         long inUse = trackerRepository.countByStatus(Tracker.TrackerStatus.IN_USE);
         long maintenance = trackerRepository.countByStatus(Tracker.TrackerStatus.MAINTENANCE);
         long damaged = trackerRepository.countByStatus(Tracker.TrackerStatus.DAMAGED);
         long retired = trackerRepository.countByStatus(Tracker.TrackerStatus.RETIRED);
-
+        
         return new TrackerStatistics(total, available, inUse, maintenance, damaged, retired);
     }
 

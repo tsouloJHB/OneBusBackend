@@ -44,25 +44,49 @@ public class DashboardStatsService {
      * Get stats as a map for easy API consumption
      */
     @Transactional
-    public Map<String, Object> getStatsMap() {
-        DashboardStats stats = getStats();
-        Map<String, Object> result = new HashMap<>();
-        
-        result.put("totalRoutes", stats.getTotalRoutes());
-        result.put("totalBuses", stats.getTotalBuses());
-        result.put("totalUsers", stats.getTotalUsers());
-        result.put("totalCompanies", stats.getTotalCompanies());
-        result.put("totalTrackers", stats.getTotalTrackers());
-        
-        // Calculate percentage changes
-        result.put("routesChange", calculatePercentageChange(stats.getTotalRoutes(), stats.getRoutesLastMonth()));
-        result.put("busesChange", calculatePercentageChange(stats.getTotalBuses(), stats.getBusesLastMonth()));
-        result.put("usersChange", calculatePercentageChange(stats.getTotalUsers(), stats.getUsersLastMonth()));
-        
-        result.put("lastUpdated", stats.getUpdatedAt());
-        result.put("lastSnapshot", stats.getLastSnapshotDate());
-        
-        return result;
+    public Map<String, Object> getStatsMap(Long companyId) {
+        if (companyId == null) {
+            DashboardStats stats = getStats();
+            Map<String, Object> result = new HashMap<>();
+            
+            result.put("totalRoutes", stats.getTotalRoutes());
+            result.put("totalBuses", stats.getTotalBuses());
+            result.put("totalUsers", stats.getTotalUsers());
+            result.put("totalCompanies", stats.getTotalCompanies());
+            result.put("totalTrackers", stats.getTotalTrackers());
+            
+            // Calculate percentage changes
+            result.put("routesChange", calculatePercentageChange(stats.getTotalRoutes(), stats.getRoutesLastMonth()));
+            result.put("busesChange", calculatePercentageChange(stats.getTotalBuses(), stats.getBusesLastMonth()));
+            result.put("usersChange", calculatePercentageChange(stats.getTotalUsers(), stats.getUsersLastMonth()));
+            
+            result.put("lastUpdated", stats.getUpdatedAt());
+            result.put("lastSnapshot", stats.getLastSnapshotDate());
+            
+            return result;
+        } else {
+            // Company-specific stats (calculated on the fly)
+            Map<String, Object> result = new HashMap<>();
+            
+            // Get company name for routes
+            String companyName = busCompanyRepository.findById(companyId)
+                .map(com.backend.onebus.model.BusCompany::getName)
+                .orElse("");
+                
+            result.put("totalRoutes", routeRepository.countByCompany(companyName));
+            result.put("totalBuses", registeredBusRepository.countByCompanyId(companyId));
+            result.put("totalUsers", userRepository.countByCompanyId(companyId));
+            result.put("totalTrackers", trackerRepository.countByCompanyId(companyId));
+            
+            // For company stats, we might not have MoM change easily without storage
+            result.put("routesChange", 0.0);
+            result.put("busesChange", 0.0);
+            result.put("usersChange", 0.0);
+            
+            result.put("lastUpdated", LocalDateTime.now());
+            
+            return result;
+        }
     }
 
     /**

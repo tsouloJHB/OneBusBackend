@@ -38,4 +38,6 @@ public interface RouteRepository extends JpaRepository<Route, Long> {
     List<Route> findByBusNumberAndCompanyIgnoreCase(@Param("busNumber") String busNumber, @Param("company") String company);
     
     List<Route> findByActiveTrue();
-} 
+
+    long countByCompany(String company);
+}

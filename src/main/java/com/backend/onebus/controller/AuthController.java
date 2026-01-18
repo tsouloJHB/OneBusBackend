@@ -99,7 +99,8 @@ public class AuthController {
                     jwtTokenService.getExpiryInstant(),
                     user.getEmail(),
                     user.getFullName(),
-                    user.getRole()
+                    user.getRole(),
+                    user.getCompanyId()
             );
 
             return ResponseEntity.ok(response);
@@ -134,7 +135,8 @@ public class AuthController {
                     jwtTokenService.getExpiryInstant(),
                     user.getEmail(),
                     user.getFullName(),
-                    user.getRole()
+                    user.getRole(),
+                    user.getCompanyId()
             );
 
             return ResponseEntity.ok(response);

@@ -2,6 +2,7 @@ package com.backend.onebus.controller;
 
 import com.backend.onebus.dto.BusCompanyCreateDTO;
 import com.backend.onebus.dto.BusCompanyResponseDTO;
+import com.backend.onebus.dto.UserUpdateDTO;
 import com.backend.onebus.service.BusCompanyService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -441,6 +442,72 @@ public class BusCompanyController {
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(new ErrorResponse("An error occurred while deleting the bus company"));
+        }
+    }
+
+    @GetMapping("/{id}/users")
+    @Operation(
+        summary = "Get company users",
+        description = "Retrieves all users associated with a specific bus company."
+    )
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Successfully retrieved users",
+                content = @Content(mediaType = "application/json", schema = @Schema(implementation = com.backend.onebus.dto.UserResponseDTO.class))),
+        @ApiResponse(responseCode = "404", description = "Bus company not found",
+                content = @Content(mediaType = "application/json")),
+        @ApiResponse(responseCode = "500", description = "Internal server error",
+                content = @Content(mediaType = "application/json"))
+    })
+    public ResponseEntity<?> getCompanyUsers(
+            @Parameter(description = "Bus company ID", required = true)
+            @PathVariable Long id) {
+        try {
+            List<com.backend.onebus.dto.UserResponseDTO> users = busCompanyService.getCompanyUsers(id);
+            return ResponseEntity.ok(users);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ErrorResponse(e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new ErrorResponse("An error occurred while fetching company users"));
+        }
+    }
+
+    @PutMapping("/{id}/users/{userId}")
+    @Operation(
+        summary = "Update company user",
+        description = "Updates the details of a specific user associated with a bus company."
+    )
+    public ResponseEntity<?> updateCompanyUser(
+            @PathVariable Long id,
+            @PathVariable Long userId,
+            @Valid @RequestBody UserUpdateDTO updateDTO) {
+        try {
+            com.backend.onebus.dto.UserResponseDTO response = busCompanyService.updateCompanyUser(id, userId, updateDTO);
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ErrorResponse(e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new ErrorResponse("An error occurred while updating company user"));
+        }
+    }
+
+    @DeleteMapping("/{id}/users/{userId}")
+    @Operation(
+        summary = "Delete company user",
+        description = "Removes a user from a specific bus company."
+    )
+    public ResponseEntity<?> deleteCompanyUser(
+            @PathVariable Long id,
+            @PathVariable Long userId) {
+        try {
+            busCompanyService.deleteCompanyUser(id, userId);
+            return ResponseEntity.ok().build();
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ErrorResponse(e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new ErrorResponse("An error occurred while deleting company user"));
         }
     }
     

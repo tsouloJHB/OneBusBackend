@@ -1,29 +1,27 @@
 package com.backend.onebus.dto;
 
+import com.backend.onebus.model.UserRole;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
-public class RegisterRequestDTO {
+public class UserUpdateDTO {
 
     @NotBlank
     @Email
     private String email;
 
-    @Size(min = 6, max = 100)
-    private String password; // Optional for company admin (auto-generated)
-
     @NotBlank
     @Size(min = 2, max = 120)
     private String fullName;
-
-    private Long companyId;
 
     @Size(max = 100)
     private String surname;
 
     @Size(max = 100)
     private String position;
+
+    private UserRole role;
 
     public String getEmail() {
         return email;
@@ -33,28 +31,12 @@ public class RegisterRequestDTO {
         this.email = email;
     }
 
-    public String getPassword() {
-        return password;
-    }
-
-    public void setPassword(String password) {
-        this.password = password;
-    }
-
     public String getFullName() {
         return fullName;
     }
 
     public void setFullName(String fullName) {
         this.fullName = fullName;
-    }
-
-    public Long getCompanyId() {
-        return companyId;
-    }
-
-    public void setCompanyId(Long companyId) {
-        this.companyId = companyId;
     }
 
     public String getSurname() {
@@ -71,5 +53,13 @@ public class RegisterRequestDTO {
 
     public void setPosition(String position) {
         this.position = position;
+    }
+
+    public UserRole getRole() {
+        return role;
+    }
+
+    public void setRole(UserRole role) {
+        this.role = role;
     }
 }

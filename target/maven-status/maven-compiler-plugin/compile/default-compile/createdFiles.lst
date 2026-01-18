@@ -36,6 +36,7 @@ com/backend/onebus/dto/RegisteredBusResponseDTO.class
 com/backend/onebus/model/UserRole.class
 com/backend/onebus/model/Driver.class
 com/backend/onebus/model/BusCompany.class
+com/backend/onebus/dto/UserUpdateDTO.class
 com/backend/onebus/service/AuthService.class
 com/backend/onebus/service/RouteGeometryService$2.class
 com/backend/onebus/controller/FullRouteController.class
@@ -93,6 +94,7 @@ com/backend/onebus/dto/RegisterRequestDTO.class
 com/backend/onebus/dto/BusNumberResponseDTO.class
 com/backend/onebus/constants/RuleConstants.class
 com/backend/onebus/service/BusNumberService.class
+com/backend/onebus/dto/UserResponseDTO.class
 com/backend/onebus/controller/MetricsController.class
 com/backend/onebus/dto/RegisteredBusCreateDTO.class
 com/backend/onebus/model/BusNumber.class

@@ -254,21 +254,24 @@ public abstract class BusCompanyRoutingStrategy {
         String oppositeDirection = direction.equalsIgnoreCase("Northbound") ? "Southbound" : "Northbound";
         List<BusLocation> busesOppositeDir = getActiveBusesForRoute(busNumber, oppositeDirection);
 
-        // 3. Filter buses in requested direction: at or ahead of client
+        // 3. Filter buses in requested direction: BEHIND or AT client (approaching)
         List<BusLocation> suitableRequested = busesRequestedDir.stream()
-            .filter(bus -> bus.getBusStopIndex() != null && bus.getBusStopIndex() >= clientBusStopIndex)
+            .filter(bus -> bus.getBusStopIndex() != null && bus.getBusStopIndex() <= clientBusStopIndex)
             .collect(Collectors.toList());
 
         if (!suitableRequested.isEmpty()) {
             // 4. Return the closest bus in requested direction
             BusLocation best = findClosestIndexBus(suitableRequested, clientBusStopIndex);
-            logger.info("[{}] Selected bus {} (index: {}) in requested direction {} for client at index {}", 
+            logger.info("[{}] Selected bus {} (index: {}) in requested direction {} for client at index {} (Approaching)", 
                 getCompanyName(), best.getBusId(), best.getBusStopIndex(), direction, clientBusStopIndex);
             return best.getBusId();
         }
 
         // 5. If no suitable bus in requested direction, try opposite direction
-        if (!busesOppositeDir.isEmpty()) {
+        // BUT ONLY IF there are NO buses in the requested direction at all.
+        // If there ARE buses in the requested direction, but they have passed the user (filtered out because index > clientIndex),
+        // we should NOT fallback to the opposite direction (per user request).
+        if (busesRequestedDir.isEmpty() && !busesOppositeDir.isEmpty()) {
             // Never suggest a bus with a negative index
             List<BusLocation> suitableOpposite = busesOppositeDir.stream()
                 .filter(bus -> bus.getBusStopIndex() != null && bus.getBusStopIndex() >= 0)
@@ -280,9 +283,15 @@ public abstract class BusCompanyRoutingStrategy {
                 return bestOpp.getBusId();
             }
         }
+        
+        // Log explicitly if we are not falling back because buses exist but passed (index > clientIndex)
+        if (!busesRequestedDir.isEmpty() && suitableRequested.isEmpty()) {
+            logger.info("[{}] Buses exist in requested direction {} but have all passed client at index {} (Indices > {}). Not falling back to opposite.", 
+                getCompanyName(), direction, clientBusStopIndex, clientBusStopIndex);
+        }
 
         // 6. No buses available in either direction
-        logger.warn("[{}] No buses available for route {} in either direction.", getCompanyName(), busNumber);
+        logger.warn("[{}] No suitable buses available for route {}.", getCompanyName(), busNumber);
         return null;
     }
     

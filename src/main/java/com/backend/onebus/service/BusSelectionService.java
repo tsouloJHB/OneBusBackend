@@ -39,21 +39,24 @@ public class BusSelectionService {
         String oppositeDirection = direction.equalsIgnoreCase("Northbound") ? "Southbound" : "Northbound";
         List<BusLocation> busesOppositeDir = getActiveBusesForRoute(busNumber, oppositeDirection);
 
-        // 3. Filter buses in requested direction: at or ahead of client
+        // 3. Filter buses in requested direction: BEHIND or AT client (approaching)
         List<BusLocation> suitableRequested = busesRequestedDir.stream()
-            .filter(bus -> bus.getBusStopIndex() != null && bus.getBusStopIndex() >= clientBusStopIndex)
+            .filter(bus -> bus.getBusStopIndex() != null && bus.getBusStopIndex() <= clientBusStopIndex)
             .collect(Collectors.toList());
 
         if (!suitableRequested.isEmpty()) {
             // 4. Return the closest bus in requested direction
             BusLocation best = findClosestIndexBus(suitableRequested, clientBusStopIndex);
-            logger.info("Selected bus {} (index: {}) in requested direction {} for client at index {}", 
+            logger.info("Selected bus {} (index: {}) in requested direction {} for client at index {} (Approaching)", 
                 best.getBusId(), best.getBusStopIndex(), direction, clientBusStopIndex);
             return best.getBusId();
         }
 
         // 5. If no suitable bus in requested direction, try opposite direction
-        if (!busesOppositeDir.isEmpty()) {
+        // BUT ONLY IF there are NO buses in the requested direction at all.
+        // If there ARE buses in the requested direction, but they have passed the user (filtered out),
+        // we should NOT fallback to the opposite direction.
+        if (busesRequestedDir.isEmpty() && !busesOppositeDir.isEmpty()) {
             // Never suggest a bus with a negative index
             List<BusLocation> suitableOpposite = busesOppositeDir.stream()
                 .filter(bus -> bus.getBusStopIndex() != null && bus.getBusStopIndex() >= 0)
@@ -65,9 +68,15 @@ public class BusSelectionService {
                 return bestOpp.getBusId();
             }
         }
+        
+        // Log explicitly if we are not falling back because buses exist but passed
+        if (!busesRequestedDir.isEmpty() && suitableRequested.isEmpty()) {
+            logger.info("Buses exist in requested direction {} but have all passed client at index {}. Not falling back to opposite.", 
+                direction, clientBusStopIndex);
+        }
 
         // 6. No buses available in either direction
-        logger.warn("No buses available for route {} in either direction.", busNumber);
+        logger.warn("No suitable buses available for route {}.", busNumber);
         return null;
     }
     
@@ -101,8 +110,8 @@ public class BusSelectionService {
     
     /**
      * Filter buses to only include those suitable for the client
-     * - Disregard buses with index > clientIndex + MAX_INDEX_DIFFERENCE
-     * - Only include buses that are ahead of or at the client's position
+     * - Only include buses that are BEHIND or AT the client's position (Approaching)
+     * - Disregard buses that are too far behind (optional, depends on MAX_INDEX_DIFFERENCE usage)
      */
     private List<BusLocation> filterSuitableBuses(List<BusLocation> activeBuses, int clientBusStopIndex) {
         return activeBuses.stream()
@@ -110,11 +119,11 @@ public class BusSelectionService {
                     Integer busIndex = bus.getBusStopIndex();
                     if (busIndex == null) return false;
                     
-                    // Only consider buses that are at or ahead of the client
-                    if (busIndex < clientBusStopIndex) return false;
+                    // Only consider buses that are BEHIND or AT the client (Approaching)
+                    if (busIndex > clientBusStopIndex) return false;
                     
-                    // Disregard buses with index > clientIndex + MAX_INDEX_DIFFERENCE
-                    if (busIndex > clientBusStopIndex + MAX_INDEX_DIFFERENCE) return false;
+                    // Disregard buses that are too far away? (Optional, kept logic consistent with direction fix)
+                    // if (busIndex < clientBusStopIndex - MAX_INDEX_DIFFERENCE) return false;
                     
                     return true;
                 })
@@ -179,9 +188,14 @@ public class BusSelectionService {
             
             int busIndex = busLocation.getBusStopIndex();
             
-            // Check if bus is still within acceptable range
-            return busIndex >= clientBusStopIndex && 
-                   busIndex <= clientBusStopIndex + MAX_INDEX_DIFFERENCE;
+            // Check if bus is still suitable (Must be BEHIND or AT client, i.e., Approaching)
+            // If busIndex > clientBusStopIndex, it has PASSED the client.
+            if (busIndex > clientBusStopIndex) return false;
+            
+            // Optional: Check if it's too far behind? For now just ensure it hasn't passed.
+            // if (busIndex < clientBusStopIndex - MAX_INDEX_DIFFERENCE) return false;
+            
+            return true;
             
         } catch (Exception e) {
             logger.error("Error checking if bus {} is still suitable: {}", busId, e.getMessage());

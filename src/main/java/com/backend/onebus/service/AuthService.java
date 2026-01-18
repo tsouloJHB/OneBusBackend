@@ -18,15 +18,18 @@ public class AuthService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenService jwtTokenService;
+    private final com.backend.onebus.repository.BusCompanyRepository busCompanyRepository;
     private final DashboardStatsService dashboardStatsService;
 
     public AuthService(UserRepository userRepository,
                        PasswordEncoder passwordEncoder,
                        JwtTokenService jwtTokenService,
+                       com.backend.onebus.repository.BusCompanyRepository busCompanyRepository,
                        DashboardStatsService dashboardStatsService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtTokenService = jwtTokenService;
+        this.busCompanyRepository = busCompanyRepository;
         this.dashboardStatsService = dashboardStatsService;
     }
 
@@ -39,6 +42,21 @@ public class AuthService {
     }
 
     public AuthResponseDTO registerCompanyAdmin(RegisterRequestDTO request) {
+        if (request.getCompanyId() == null) {
+            throw new IllegalArgumentException("Company ID is required for company admin");
+        }
+        
+        // Find company to get name for password generation
+        com.backend.onebus.model.BusCompany company = busCompanyRepository.findById(request.getCompanyId())
+                .orElseThrow(() -> new IllegalArgumentException("Company not found"));
+                
+        // Auto-generate password: [CompanyName]onebus#[Year]
+        String cleanCompanyName = company.getName().replaceAll("\\s+", "");
+        int year = java.time.Year.now().getValue();
+        String autoPassword = String.format("%sonebus#%d", cleanCompanyName, year);
+        
+        request.setPassword(autoPassword);
+        
         return registerWithRole(request, UserRole.COMPANY_ADMIN);
     }
 
@@ -51,7 +69,7 @@ public class AuthService {
         }
 
         String token = jwtTokenService.generateToken(user);
-        return new AuthResponseDTO(token, jwtTokenService.getExpiryInstant(), user.getEmail(), user.getFullName(), user.getRole());
+        return new AuthResponseDTO(token, jwtTokenService.getExpiryInstant(), user.getEmail(), user.getFullName(), user.getRole(), user.getCompanyId());
     }
 
     /**
@@ -80,12 +98,28 @@ public class AuthService {
         if (userRepository.existsByEmail(request.getEmail())) {
             throw new IllegalArgumentException("Email already registered");
         }
+        
+        if (request.getPassword() == null || request.getPassword().isEmpty()) {
+            throw new IllegalArgumentException("Password is required");
+        }
 
         User user = new User();
         user.setEmail(request.getEmail());
         user.setFullName(request.getFullName());
         user.setRole(role);
         user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
+        user.setRawPassword(request.getPassword()); // Store raw password for display
+        
+        // Set additional fields
+        if (request.getCompanyId() != null) {
+            user.setCompanyId(request.getCompanyId());
+        }
+        if (request.getSurname() != null) {
+            user.setSurname(request.getSurname());
+        }
+        if (request.getPosition() != null) {
+            user.setPosition(request.getPosition());
+        }
 
         User saved = userRepository.save(user);
         
@@ -93,6 +127,6 @@ public class AuthService {
         dashboardStatsService.incrementUsers();
         
         String token = jwtTokenService.generateToken(saved);
-        return new AuthResponseDTO(token, jwtTokenService.getExpiryInstant(), saved.getEmail(), saved.getFullName(), saved.getRole());
+        return new AuthResponseDTO(token, jwtTokenService.getExpiryInstant(), saved.getEmail(), saved.getFullName(), saved.getRole(), saved.getCompanyId());
     }
 }
