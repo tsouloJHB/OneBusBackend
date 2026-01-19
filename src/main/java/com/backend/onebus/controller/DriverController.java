@@ -222,4 +222,61 @@ public class DriverController {
         stats.put("activeDrivers", driverService.getActiveDriverCount());
         return ResponseEntity.ok(stats);
     }
+
+    /**
+     * Assign driver to a bus
+     * Automatically handles removal of existing driver from the bus
+     */
+    @PostMapping("/{id}/assign-to-bus")
+    @Operation(summary = "Assign driver to bus", 
+               description = "Assigns a driver to a bus. If the bus already has a driver, that driver will be removed and set to INACTIVE.")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Driver assigned successfully"),
+        @ApiResponse(responseCode = "400", description = "Invalid input or driver/bus not found"),
+        @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    public ResponseEntity<?> assignDriverToBus(
+        @PathVariable Long id,
+        @Parameter(description = "Registration number of the bus") @RequestParam String busRegistrationNumber) {
+        try {
+            DriverDTO assignedDriver = driverService.assignDriverToBus(id, busRegistrationNumber);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("message", "Driver assigned to bus successfully");
+            response.put("driver", assignedDriver);
+            
+            return ResponseEntity.ok(response);
+        } catch (RuntimeException e) {
+            Map<String, String> error = new HashMap<>();
+            error.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+        }
+    }
+
+    /**
+     * Remove driver from bus assignment
+     */
+    @PostMapping("/{id}/remove-from-bus")
+    @Operation(summary = "Remove driver from bus", 
+               description = "Removes a driver from their current bus assignment and sets them to INACTIVE.")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Driver removed from bus successfully"),
+        @ApiResponse(responseCode = "400", description = "Driver not found or not assigned to any bus"),
+        @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    public ResponseEntity<?> removeDriverFromBus(@PathVariable Long id) {
+        try {
+            DriverDTO updatedDriver = driverService.removeDriverFromBus(id);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("message", "Driver removed from bus successfully");
+            response.put("driver", updatedDriver);
+            
+            return ResponseEntity.ok(response);
+        } catch (RuntimeException e) {
+            Map<String, String> error = new HashMap<>();
+            error.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+        }
+    }
 }

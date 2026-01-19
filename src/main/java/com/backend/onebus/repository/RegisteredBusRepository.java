@@ -48,4 +48,9 @@ public interface RegisteredBusRepository extends JpaRepository<RegisteredBus, Lo
      */
     @Query("SELECT b FROM RegisteredBus b LEFT JOIN FETCH b.company WHERE b.trackerImei IS NOT NULL AND b.tracker IS NULL")
     List<RegisteredBus> findBusesNeedingTrackerMigration();
+
+    /**
+     * Find registered buses by driver ID
+     */
+    List<RegisteredBus> findByDriverId(String driverId);
 }

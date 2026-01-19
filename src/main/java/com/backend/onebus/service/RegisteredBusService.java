@@ -5,9 +5,11 @@ import com.backend.onebus.dto.RegisteredBusResponseDTO;
 import com.backend.onebus.model.Bus;
 import com.backend.onebus.model.BusCompany;
 import com.backend.onebus.model.RegisteredBus;
+import com.backend.onebus.model.Driver;
 import com.backend.onebus.repository.BusCompanyRepository;
 import com.backend.onebus.repository.BusRepository;
 import com.backend.onebus.repository.RegisteredBusRepository;
+import com.backend.onebus.repository.DriverRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,6 +37,9 @@ public class RegisteredBusService {
 
     @Autowired
     private DashboardStatsService dashboardStatsService;
+
+    @Autowired
+    private DriverRepository driverRepository;
 
     /**
      * Create a new registered bus
@@ -68,6 +73,9 @@ public class RegisteredBusService {
 
         RegisteredBus savedBus = registeredBusRepository.save(registeredBus);
         
+        // Synchronize driver status with bus status if driver is assigned
+        synchronizeDriverStatus(createDTO.getDriverId(), RegisteredBus.BusStatus.valueOf(createDTO.getStatus().toUpperCase()));
+        
         // Update dashboard stats
         dashboardStatsService.incrementBuses();
 
@@ -80,6 +88,10 @@ public class RegisteredBusService {
     public RegisteredBusResponseDTO updateRegisteredBus(Long id, RegisteredBusCreateDTO updateDTO) {
         RegisteredBus registeredBus = registeredBusRepository.findById(id)
             .orElseThrow(() -> new IllegalArgumentException("Registered bus not found with ID: " + id));
+
+        // Track the old driver ID before updating
+        String oldDriverId = registeredBus.getDriverId();
+        String newDriverId = updateDTO.getDriverId();
 
         // Validate company exists if companyId is provided
         if (updateDTO.getCompanyId() != null && !updateDTO.getCompanyId().equals(registeredBus.getCompany().getId())) {
@@ -111,6 +123,9 @@ public class RegisteredBusService {
         registeredBus.setRouteName(updateDTO.getRouteName());
 
         RegisteredBus savedBus = registeredBusRepository.save(registeredBus);
+
+        // Handle driver status changes
+        handleDriverStatusChange(oldDriverId, newDriverId, RegisteredBus.BusStatus.valueOf(updateDTO.getStatus().toUpperCase()));
 
         return convertToResponseDTO(savedBus);
     }
@@ -189,5 +204,106 @@ public class RegisteredBusService {
         dto.setCreatedAt(bus.getCreatedAt());
         dto.setUpdatedAt(bus.getUpdatedAt());
         return dto;
+    }
+
+    /**
+     * Handle driver status changes when updating bus assignment
+     * - If driver is removed from bus, set old driver to INACTIVE
+     * - If driver is changed, set old driver to INACTIVE and sync new driver status
+     * - If same driver, sync driver status with bus status
+     */
+    private void handleDriverStatusChange(String oldDriverId, String newDriverId, RegisteredBus.BusStatus busStatus) {
+        boolean hadDriver = oldDriverId != null && !oldDriverId.trim().isEmpty();
+        boolean hasDriver = newDriverId != null && !newDriverId.trim().isEmpty();
+        boolean driverChanged = hadDriver && hasDriver && !oldDriverId.equals(newDriverId);
+        boolean driverRemoved = hadDriver && !hasDriver;
+
+        // If driver was removed or changed, set old driver to INACTIVE
+        if (driverRemoved || driverChanged) {
+            setDriverInactive(oldDriverId);
+            logger.info("Set driver {} to INACTIVE (driver {} from bus)", 
+                oldDriverId, driverRemoved ? "removed" : "changed");
+        }
+
+        // If there's a new/current driver, synchronize their status with bus status
+        if (hasDriver) {
+            synchronizeDriverStatus(newDriverId, busStatus);
+        }
+    }
+
+    /**
+     * Set a driver to INACTIVE status
+     */
+    private void setDriverInactive(String driverId) {
+        if (driverId == null || driverId.trim().isEmpty()) {
+            return;
+        }
+
+        try {
+            Optional<Driver> driverOpt = driverRepository.findByDriverId(driverId);
+            if (driverOpt.isEmpty()) {
+                logger.warn("Driver not found with ID: {}", driverId);
+                return;
+            }
+
+            Driver driver = driverOpt.get();
+            if (driver.getStatus() != Driver.DriverStatus.INACTIVE) {
+                driver.setStatus(Driver.DriverStatus.INACTIVE);
+                driverRepository.save(driver);
+                logger.info("Set driver {} to INACTIVE (no longer assigned to bus)", driverId);
+            }
+        } catch (Exception e) {
+            logger.error("Failed to set driver inactive for driverId: {}", driverId, e);
+        }
+    }
+
+    /**
+     * Synchronize driver status with bus status
+     * When a driver is assigned to a bus, the driver's status should match the bus status
+     */
+    private void synchronizeDriverStatus(String driverId, RegisteredBus.BusStatus busStatus) {
+        if (driverId == null || driverId.trim().isEmpty()) {
+            return; // No driver assigned, nothing to synchronize
+        }
+
+        try {
+            Optional<Driver> driverOpt = driverRepository.findByDriverId(driverId);
+            if (driverOpt.isEmpty()) {
+                logger.warn("Driver not found with ID: {}", driverId);
+                return;
+            }
+
+            Driver driver = driverOpt.get();
+
+            // Map bus status to driver status
+            Driver.DriverStatus driverStatus;
+            switch (busStatus) {
+                case ACTIVE:
+                    driverStatus = Driver.DriverStatus.ACTIVE;
+                    break;
+                case INACTIVE:
+                    driverStatus = Driver.DriverStatus.INACTIVE;
+                    break;
+                case MAINTENANCE:
+                case RETIRED:
+                    // For maintenance or retired buses, set driver to inactive
+                    driverStatus = Driver.DriverStatus.INACTIVE;
+                    break;
+                default:
+                    logger.warn("Unknown bus status: {}", busStatus);
+                    return;
+            }
+
+            // Update driver status if different
+            if (driver.getStatus() != driverStatus) {
+                driver.setStatus(driverStatus);
+                driverRepository.save(driver);
+                logger.info("Synchronized driver {} status to {} based on bus status {}", 
+                    driverId, driverStatus, busStatus);
+            }
+        } catch (Exception e) {
+            logger.error("Failed to synchronize driver status for driverId: {}", driverId, e);
+            // Don't throw exception - this is a non-critical operation
+        }
     }
 }

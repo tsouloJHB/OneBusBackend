@@ -65,6 +65,7 @@ com/backend/onebus/repository/FullRouteRepository.class
 com/backend/onebus/service/RouteGeometryService$1.class
 com/backend/onebus/controller/FullRouteController$3.class
 com/backend/onebus/model/DashboardStats.class
+com/backend/onebus/service/RegisteredBusService$1.class
 com/backend/onebus/service/MetricsService$TrackingPipelineMetric.class
 com/backend/onebus/config/StaticResourceConfig.class
 com/backend/onebus/model/BusLocation.class
@@ -112,6 +113,7 @@ com/backend/onebus/repository/DriverRepository.class
 com/backend/onebus/repository/RegisteredBusRepository.class
 com/backend/onebus/repository/CompanyRuleRepository.class
 com/backend/onebus/OneBusApplication.class
+com/backend/onebus/service/DriverService$1.class
 com/backend/onebus/service/routing/DefaultRoutingStrategy.class
 com/backend/onebus/service/DriverService.class
 com/backend/onebus/service/routing/MetroBusRoutingStrategy.class

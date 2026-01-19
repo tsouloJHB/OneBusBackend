@@ -5,8 +5,12 @@ import com.backend.onebus.dto.DriverRegistrationRequest;
 import com.backend.onebus.model.BusCompany;
 import com.backend.onebus.model.Driver;
 import com.backend.onebus.model.Driver.DriverStatus;
+import com.backend.onebus.model.RegisteredBus;
 import com.backend.onebus.repository.BusCompanyRepository;
 import com.backend.onebus.repository.DriverRepository;
+import com.backend.onebus.repository.RegisteredBusRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -21,11 +25,16 @@ import java.util.stream.Collectors;
 @Service
 public class DriverService {
     
+    private static final Logger logger = LoggerFactory.getLogger(DriverService.class);
+    
     @Autowired
     private DriverRepository driverRepository;
     
     @Autowired
     private BusCompanyRepository busCompanyRepository;
+    
+    @Autowired
+    private RegisteredBusRepository registeredBusRepository;
     
     @Autowired
     private PasswordEncoder passwordEncoder;
@@ -334,5 +343,98 @@ public class DriverService {
      */
     public long getActiveDriverCount() {
         return driverRepository.countActiveDrivers();
+    }
+
+    /**
+     * Assign a driver to a bus
+     * If the bus already has a driver, that driver will be removed and set to INACTIVE
+     */
+    @Transactional
+    public DriverDTO assignDriverToBus(Long driverId, String busRegistrationNumber) {
+        // Find the driver
+        Driver driver = driverRepository.findById(driverId)
+            .orElseThrow(() -> new RuntimeException("Driver not found with ID: " + driverId));
+        
+        // Find the bus
+        RegisteredBus bus = registeredBusRepository.findByRegistrationNumber(busRegistrationNumber);
+        if (bus == null) {
+            throw new RuntimeException("Bus not found with registration number: " + busRegistrationNumber);
+        }
+        
+        // Check if the bus already has a driver
+        String existingDriverId = bus.getDriverId();
+        if (existingDriverId != null && !existingDriverId.trim().isEmpty()) {
+            // Remove the existing driver from the bus
+            if (!existingDriverId.equals(driver.getDriverId())) {
+                driverRepository.findByDriverId(existingDriverId).ifPresent(existingDriver -> {
+                    existingDriver.setStatus(DriverStatus.INACTIVE);
+                    driverRepository.save(existingDriver);
+                    logger.info("Set existing driver {} to INACTIVE (replaced by driver {})", 
+                        existingDriverId, driver.getDriverId());
+                });
+            }
+        }
+        
+        // Assign the driver to the bus
+        bus.setDriverId(driver.getDriverId());
+        bus.setDriverName(driver.getFullName());
+        registeredBusRepository.save(bus);
+        
+        // Update driver status based on bus status
+        DriverStatus newDriverStatus;
+        switch (bus.getStatus()) {
+            case ACTIVE:
+                newDriverStatus = DriverStatus.ACTIVE;
+                break;
+            case INACTIVE:
+            case MAINTENANCE:
+            case RETIRED:
+                newDriverStatus = DriverStatus.INACTIVE;
+                break;
+            default:
+                newDriverStatus = DriverStatus.INACTIVE;
+        }
+        
+        driver.setStatus(newDriverStatus);
+        Driver savedDriver = driverRepository.save(driver);
+        
+        logger.info("Assigned driver {} to bus {} with status {}", 
+            driver.getDriverId(), busRegistrationNumber, newDriverStatus);
+        
+        return new DriverDTO(savedDriver);
+    }
+
+    /**
+     * Remove a driver from their current bus assignment
+     * Sets the driver status to INACTIVE
+     */
+    @Transactional
+    public DriverDTO removeDriverFromBus(Long driverId) {
+        // Find the driver
+        Driver driver = driverRepository.findById(driverId)
+            .orElseThrow(() -> new RuntimeException("Driver not found with ID: " + driverId));
+        
+        // Find any buses assigned to this driver
+        List<RegisteredBus> assignedBuses = registeredBusRepository.findByDriverId(driver.getDriverId());
+        
+        if (assignedBuses.isEmpty()) {
+            throw new RuntimeException("Driver is not currently assigned to any bus");
+        }
+        
+        // Remove driver from all assigned buses
+        for (RegisteredBus bus : assignedBuses) {
+            bus.setDriverId(null);
+            bus.setDriverName(null);
+            registeredBusRepository.save(bus);
+            logger.info("Removed driver {} from bus {}", driver.getDriverId(), bus.getRegistrationNumber());
+        }
+        
+        // Set driver status to INACTIVE
+        driver.setStatus(DriverStatus.INACTIVE);
+        Driver savedDriver = driverRepository.save(driver);
+        
+        logger.info("Set driver {} to INACTIVE (removed from bus assignment)", driver.getDriverId());
+        
+        return new DriverDTO(savedDriver);
     }
 }
