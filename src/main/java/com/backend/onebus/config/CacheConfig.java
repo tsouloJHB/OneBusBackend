@@ -18,7 +18,8 @@ public class CacheConfig {
         CaffeineCacheManager cacheManager = new CaffeineCacheManager(
             "buses", "routes", "routes_by_bus", "routes_by_dir", 
             "routes_by_company", "routes_company_dir", "routes_ignorecase",
-            "route_stops", "route_stops_by_dir", "full_routes", "companies"
+            "route_stops", "route_stops_by_dir", "full_routes", "companies",
+            "geocodingCache", "reverseGeocodingCache"
         );
         cacheManager.setCaffeine(Caffeine.newBuilder()
                 .expireAfterWrite(10, TimeUnit.MINUTES)
