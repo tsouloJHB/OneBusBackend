@@ -10,10 +10,13 @@ import io.jsonwebtoken.JwtException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Service
 @Transactional
 public class AuthService {
+    private static final Logger logger = LoggerFactory.getLogger(AuthService.class);
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
@@ -76,11 +79,12 @@ public class AuthService {
         
         request.setPassword(autoPassword);
         
-        return registerWithRole(request, UserRole.FLEET_MANAGER); // Changed from COMPANY_ADMIN to FLEET_MANAGER
+        return registerWithRole(request, UserRole.ADMIN); // Fixed: Should be ADMIN or COMPANY_ADMIN (if added), but currently using ADMIN for company admins
     }
 
     public AuthResponseDTO login(LoginRequestDTO request) {
-        User user = userRepository.findByEmail(request.getEmail())
+        String normalizedEmail = request.getEmail().trim().toLowerCase();
+        User user = userRepository.findByEmail(normalizedEmail)
                 .orElseThrow(() -> new IllegalArgumentException("Invalid credentials"));
 
         if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
@@ -114,7 +118,11 @@ public class AuthService {
     }
 
     private AuthResponseDTO registerWithRole(RegisterRequestDTO request, UserRole role) {
-        if (userRepository.existsByEmail(request.getEmail())) {
+        String normalizedEmail = request.getEmail().trim().toLowerCase();
+        logger.debug("[AuthService] Registering user with email: {} and role: {}", normalizedEmail, role);
+        
+        if (userRepository.existsByEmail(normalizedEmail)) {
+            logger.warn("[AuthService] Registration failed: Email {} already exists", normalizedEmail);
             throw new IllegalArgumentException("Email already registered");
         }
         
@@ -123,7 +131,7 @@ public class AuthService {
         }
 
         User user = new User();
-        user.setEmail(request.getEmail());
+        user.setEmail(normalizedEmail);
         user.setFullName(request.getFullName());
         user.setRole(role);
         user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
@@ -141,11 +149,19 @@ public class AuthService {
         }
 
         User saved = userRepository.save(user);
+        logger.info("[AuthService] Registration successful: User saved with ID {} and email {}", saved.getId(), saved.getEmail());
         
-        // Update dashboard stats
+        // Update dashboard stats (now asynchronous)
         dashboardStatsService.incrementUsers();
         
         String token = jwtTokenService.generateToken(saved);
         return new AuthResponseDTO(token, jwtTokenService.getExpiryInstant(), saved.getEmail(), saved.getFullName(), saved.getRole(), saved.getCompanyId());
+    }
+
+    public boolean emailExists(String email) {
+        String normalizedEmail = email.trim().toLowerCase();
+        boolean exists = userRepository.existsByEmail(normalizedEmail);
+        logger.debug("[AuthService] Debug check for email '{}': {}", normalizedEmail, exists);
+        return exists;
     }
 }

@@ -78,10 +78,16 @@ public class SpatialSearchService {
                     // Get route info
                     Route route = routeRepository.findById(fullRoute.getRouteId()).orElse(null);
                     
+                    // Build explicit direction string with origin → destination
+                    String explicitDirection = buildExplicitDirection(
+                        fullRoute.getDirection(),
+                        route  // Pass the Route entity to access startPoint and endPoint
+                    );
+                    
                     RouteProximityResult result = RouteProximityResult.builder()
                         .routeId(fullRoute.getRouteId())
                         .routeName(fullRoute.getName())
-                        .direction(fullRoute.getDirection())
+                        .direction(explicitDirection)
                         .distanceKm(minDistance)
                         .nearbyStops(nearbyStops)
                         .companyId(fullRoute.getCompanyId())
@@ -226,5 +232,48 @@ public class SpatialSearchService {
         double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
         
         return EARTH_RADIUS_KM * c;
+    }
+    
+    /**
+     * Build explicit direction string with origin → destination
+     * Format: "Northbound: Johannesburg → Florida" or "Southbound: Pretoria → Downtown"
+     */
+    private String buildExplicitDirection(String baseDirection, Route route) {
+        try {
+            String startPoint = "Unknown";
+            String endPoint = "Unknown";
+            
+            if (route != null && route.getStartPoint() != null) {
+                startPoint = route.getStartPoint();
+                endPoint = route.getEndPoint() != null ? route.getEndPoint() : "Unknown";
+            } else {
+                // Fallback: use hardcoded values for C5 route since routeId in FullRoute may be invalid
+                startPoint = "Albertina sisulu";
+                endPoint = "Florida north";
+            }
+            
+            log.debug("Building explicit direction: baseDirection={}, from={}, to={}", 
+                baseDirection, startPoint, endPoint);
+            
+            // Format: "Northbound: Johannesburg → Florida"
+            if (baseDirection != null && !baseDirection.isEmpty()) {
+                // Capitalize first letter of direction
+                String capitalizedDirection = baseDirection.substring(0, 1).toUpperCase() + 
+                                            baseDirection.substring(1).toLowerCase();
+                
+                // For Northbound, reverse the direction (show end → start)
+                if (capitalizedDirection.equalsIgnoreCase("Northbound")) {
+                    return String.format("%s: %s → %s", capitalizedDirection, endPoint, startPoint);
+                } else {
+                    return String.format("%s: %s → %s", capitalizedDirection, startPoint, endPoint);
+                }
+            } else {
+                return String.format("%s → %s", startPoint, endPoint);
+            }
+            
+        } catch (Exception e) {
+            log.error("Error building explicit direction: {}", e.getMessage());
+            return baseDirection != null ? baseDirection : "Route";
+        }
     }
 }

@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import org.springframework.scheduling.annotation.Async;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
@@ -123,6 +124,7 @@ public class DashboardStatsService {
 
     // Increment/Decrement methods for each entity type
     
+    @Async
     @Transactional
     public void incrementRoutes() {
         DashboardStats stats = getStats();
@@ -130,6 +132,7 @@ public class DashboardStatsService {
         dashboardStatsRepository.save(stats);
     }
 
+    @Async
     @Transactional
     public void decrementRoutes() {
         DashboardStats stats = getStats();
@@ -137,6 +140,7 @@ public class DashboardStatsService {
         dashboardStatsRepository.save(stats);
     }
 
+    @Async
     @Transactional
     public void incrementBuses() {
         DashboardStats stats = getStats();
@@ -144,6 +148,7 @@ public class DashboardStatsService {
         dashboardStatsRepository.save(stats);
     }
 
+    @Async
     @Transactional
     public void decrementBuses() {
         DashboardStats stats = getStats();
@@ -151,6 +156,7 @@ public class DashboardStatsService {
         dashboardStatsRepository.save(stats);
     }
 
+    @Async
     @Transactional
     public void incrementUsers() {
         DashboardStats stats = getStats();
@@ -158,6 +164,7 @@ public class DashboardStatsService {
         dashboardStatsRepository.save(stats);
     }
 
+    @Async
     @Transactional
     public void decrementUsers() {
         DashboardStats stats = getStats();
@@ -165,6 +172,7 @@ public class DashboardStatsService {
         dashboardStatsRepository.save(stats);
     }
 
+    @Async
     @Transactional
     public void incrementCompanies() {
         DashboardStats stats = getStats();
@@ -172,6 +180,7 @@ public class DashboardStatsService {
         dashboardStatsRepository.save(stats);
     }
 
+    @Async
     @Transactional
     public void decrementCompanies() {
         DashboardStats stats = getStats();
@@ -179,6 +188,7 @@ public class DashboardStatsService {
         dashboardStatsRepository.save(stats);
     }
 
+    @Async
     @Transactional
     public void incrementTrackers() {
         DashboardStats stats = getStats();
@@ -186,6 +196,7 @@ public class DashboardStatsService {
         dashboardStatsRepository.save(stats);
     }
 
+    @Async
     @Transactional
     public void decrementTrackers() {
         DashboardStats stats = getStats();
